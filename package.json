@@ -1,0 +1,9 @@
+{
+  "name": "iron-log",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Iron Log — fitness tracker com contas e dados guardados via Netlify Blobs",
+  "dependencies": {
+    "@netlify/blobs": "^8.0.0"
+  }
+}
