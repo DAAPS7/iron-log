@@ -9,4 +9,4 @@ compatibility_date = "2026-01-01"
 # projeto → Settings → Functions → KV namespace bindings).
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "0a86e3d7e1224a0e83c281e167282914"
