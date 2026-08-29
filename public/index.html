@@ -1662,6 +1662,7 @@ function renderBuilderList(){
           <div><label>Reps min</label><input type="number" min="1" data-i="${i}" class="bMinReps" value="${ex.minReps}"></div>
           <div><label>Reps max</label><input type="number" min="1" data-i="${i}" class="bMaxReps" value="${ex.maxReps}"></div>
         </div>
+        <div class="field"><label>Séries de aquecimento (opcional)</label><input type="number" min="0" data-i="${i}" class="bWarmupSets" placeholder="ex: 2" value="${ex.warmupSets ?? ''}"></div>
       </div>`;
     }else{
       return `<div class="exercise-builder-row">
@@ -1673,6 +1674,7 @@ function renderBuilderList(){
           <div><label>Séries</label><input type="number" min="1" data-i="${i}" class="bSets" value="${ex.sets}"></div>
           <div><label>Duração (min)</label><input type="number" min="1" data-i="${i}" class="bDuration" value="${ex.duration}"></div>
         </div>
+        <div class="field"><label>Séries de aquecimento (opcional)</label><input type="number" min="0" data-i="${i}" class="bWarmupSets" placeholder="ex: 1" value="${ex.warmupSets ?? ''}"></div>
       </div>`;
     }
   }).join('');
@@ -1715,6 +1717,10 @@ function renderBuilderList(){
   el.querySelectorAll('.bDuration').forEach(s=>s.addEventListener('input', e=>{
     builderExercises[parseInt(e.target.dataset.i)].duration = parseInt(e.target.value)||1;
   }));
+  el.querySelectorAll('.bWarmupSets').forEach(s=>s.addEventListener('input', e=>{
+    const v = parseInt(e.target.value);
+    builderExercises[parseInt(e.target.dataset.i)].warmupSets = (isNaN(v) || v<=0) ? null : v;
+  }));
 }
 
 function moveBuilderExercise(index, delta){
@@ -1727,11 +1733,11 @@ function moveBuilderExercise(index, delta){
 
 document.getElementById('addStrengthBtn').addEventListener('click', ()=>{
   const first = STRENGTH_EXERCISES[0];
-  builderExercises.push({type:'strength', name:first.name, muscle:first.muscle, isCustom:false, minReps:8, maxReps:12, sets:3});
+  builderExercises.push({type:'strength', name:first.name, muscle:first.muscle, isCustom:false, minReps:8, maxReps:12, sets:3, warmupSets:null});
   renderBuilderList();
 });
 document.getElementById('addCardioBtn').addEventListener('click', ()=>{
-  builderExercises.push({type:'cardio', name:'', duration:20, sets:1});
+  builderExercises.push({type:'cardio', name:'', duration:20, sets:1, warmupSets:null});
   renderBuilderList();
 });
 document.getElementById('saveWorkoutBtn').addEventListener('click', ()=>{
@@ -1809,6 +1815,7 @@ function startSession(workoutId){
       name: ex.name, type: ex.type, muscle: ex.muscle ?? null,
       minReps: ex.minReps, maxReps: ex.maxReps, duration: ex.duration,
       targetSets: ex.sets ?? null,
+      targetWarmupSets: ex.warmupSets ?? null,
       sets: []
     }))
   };
@@ -1836,6 +1843,7 @@ function startEditLog(logId){
         name: tex.name, type: tex.type, muscle: tex.muscle ?? null,
         minReps: tex.minReps ?? null, maxReps: tex.maxReps ?? null, duration: tex.duration ?? null,
         targetSets: tex.sets ?? null,
+        targetWarmupSets: tex.warmupSets ?? null,
         sets: logged ? [...logged.sets] : []
       };
     });
@@ -1953,6 +1961,25 @@ const DISTANCE_UNITS = ['km', 'mi', 'm'];
 
 function isWarmupSet(s){ return s.startsWith('Aquecimento: '); }
 
+// Extrai {totalMinutes, distance, unit} de um registo de cardio tipo
+// "20min 30s 5km" — totalMinutes já inclui os segundos como fração.
+function parseCardioSet(s){
+  const m = s.match(/^(\d+)min(?:\s+(\d+)s)?(?:\s+([\d.]+)(km|mi|m))?/);
+  if(!m) return null;
+  const minutes = parseInt(m[1]) || 0;
+  const seconds = m[2] ? parseInt(m[2]) : 0;
+  return {
+    totalMinutes: minutes + seconds/60,
+    distance: m[3] ? parseFloat(m[3]) : null,
+    unit: m[4] || null,
+  };
+}
+function formatMinSec(totalMinutes){
+  const mins = Math.floor(totalMinutes);
+  const secs = Math.round((totalMinutes - mins) * 60);
+  return secs > 0 ? `${mins}:${String(secs).padStart(2,'0')} min` : `${mins} min`;
+}
+
 function renderSession(){
   saveSessionDraft();
   const el = document.getElementById('sessionExerciseList');
@@ -1976,7 +2003,10 @@ function renderSession(){
         ${warmupCheckbox}
         <button class="btn btn-strength btn-block" data-addset="${i}" style="margin-top:8px;">+ Adicionar série</button>`
       : `<div class="set-input-row">
-          <input type="number" placeholder="Minutos" class="setMinutes" data-ex="${i}" min="1">
+          <input type="number" placeholder="Minutos" class="setMinutes" data-ex="${i}" min="0">
+          <input type="number" placeholder="Segundos" class="setSeconds" data-ex="${i}" min="0" max="59">
+        </div>
+        <div class="set-input-row" style="margin-top:8px;">
           <input type="number" placeholder="Distância — opcional" class="setDistance" data-ex="${i}" min="0" step="0.1">
           <select class="setDistanceUnit" data-ex="${i}">
             ${DISTANCE_UNITS.map(u=>`<option value="${u}">${u}</option>`).join('')}
@@ -1992,10 +2022,15 @@ function renderSession(){
         : 'Exercício extra';
     }else{
       targetNote = ex.duration!=null
-        ? `Alvo: ${ex.targetSets ?? '?'} séries de ${ex.duration} min`
+        ? `Alvo: ${ex.targetSets ?? '?'} séries de ${formatMinSec(ex.duration)}`
         : 'Exercício extra';
     }
-    const progressNote = ex.targetSets ? ` · ${ex.sets.length}/${ex.targetSets} feitas` : (ex.sets.length ? ` · ${ex.sets.length} feita(s)` : '');
+    if(ex.targetWarmupSets) targetNote += ` (+${ex.targetWarmupSets} aquecimento)`;
+    const workingCount = ex.sets.filter(s=>!isWarmupSet(s)).length;
+    const warmupCount = ex.sets.filter(s=>isWarmupSet(s)).length;
+    let progressNote = ex.targetSets ? ` · ${workingCount}/${ex.targetSets} feitas` : (workingCount ? ` · ${workingCount} feita(s)` : '');
+    if(ex.targetWarmupSets) progressNote += ` · aquecimento ${warmupCount}/${ex.targetWarmupSets}`;
+    else if(warmupCount) progressNote += ` · ${warmupCount} aquecimento`;
     return `<div class="session-ex">
       <div class="session-ex-head">
         <span class="ex-tag ${ex.type==='strength'?'tag-strength':'tag-cardio'}">${ex.type==='strength'?'Força':'Cardio'}</span>
@@ -2042,17 +2077,20 @@ function renderSession(){
       ex.sets.push(`${prefix}${reps} × ${weight} ${unit}${notes ? ` (${notes})` : ''}`);
     }else{
       const minInput = el.querySelector(`.setMinutes[data-ex="${i}"]`);
+      const secInput = el.querySelector(`.setSeconds[data-ex="${i}"]`);
       const distInput = el.querySelector(`.setDistance[data-ex="${i}"]`);
       const distUnitSelect = el.querySelector(`.setDistanceUnit[data-ex="${i}"]`);
       const notesInput = el.querySelector(`.setNotesCardio[data-ex="${i}"]`);
       const warmupInput = el.querySelector(`.setWarmup[data-ex="${i}"]`);
-      const minutes = parseInt(minInput.value);
-      if(!minutes || minutes<1){ showToast('Indica os minutos.'); return; }
+      const minutes = parseInt(minInput.value) || 0;
+      const seconds = parseInt(secInput.value) || 0;
+      if(minutes<=0 && seconds<=0){ showToast('Indica a duração (minutos e/ou segundos).'); return; }
       const dist = parseFloat(distInput.value);
       const distUnit = distUnitSelect ? distUnitSelect.value : 'km';
       const notes = notesInput.value.trim();
       const prefix = warmupInput && warmupInput.checked ? 'Aquecimento: ' : '';
-      ex.sets.push(`${prefix}${minutes}min${!isNaN(dist) && dist>0 ? ` ${dist}${distUnit}` : ''}${notes ? ` (${notes})` : ''}`);
+      const timePart = `${minutes}min${seconds>0 ? ` ${seconds}s` : ''}`;
+      ex.sets.push(`${prefix}${timePart}${!isNaN(dist) && dist>0 ? ` ${dist}${distUnit}` : ''}${notes ? ` (${notes})` : ''}`);
     }
     renderSession();
   }));
@@ -2867,8 +2905,8 @@ function updateProgressView(key){
           if(ex.type===type && ex.name===name){
             ex.sets.forEach(s=>{
               if(isWarmupSet(s)) return;
-              const m = s.match(/^(\d+)min\s+([\d.]+)(km|mi|m)/);
-              if(m) cardioPaceMode = true;
+              const parsed = parseCardioSet(s);
+              if(parsed && parsed.distance!=null) cardioPaceMode = true;
             });
           }
         });
@@ -2893,13 +2931,10 @@ function updateProgressView(key){
             let bestPace = null, bestUnitHere = cardioPaceUnit;
             ex.sets.forEach(s=>{
               if(isWarmupSet(s)) return;
-              const m = s.match(/^(\d+)min\s+([\d.]+)(km|mi|m)/);
-              if(m){
-                const mins = parseInt(m[1]), dist = parseFloat(m[2]), unit = m[3];
-                if(dist>0){
-                  const pace = mins/dist;
-                  if(bestPace===null || pace < bestPace){ bestPace = Math.round(pace*100)/100; bestUnitHere = unit; }
-                }
+              const parsed = parseCardioSet(s);
+              if(parsed && parsed.distance>0){
+                const pace = parsed.totalMinutes/parsed.distance;
+                if(bestPace===null || pace < bestPace){ bestPace = Math.round(pace*100)/100; bestUnitHere = parsed.unit || bestUnitHere; }
               }
             });
             if(bestPace!==null){
@@ -2910,10 +2945,10 @@ function updateProgressView(key){
             let bestDur = 0;
             ex.sets.forEach(s=>{
               if(isWarmupSet(s)) return;
-              const m = s.match(/^(\d+)min/);
-              if(m){ const d = parseInt(m[1]); if(d > bestDur) bestDur = d; }
+              const parsed = parseCardioSet(s);
+              if(parsed && parsed.totalMinutes > bestDur) bestDur = parsed.totalMinutes;
             });
-            if(bestDur>0) sessions.push({date:lw.date, value:bestDur, detail:`Melhor série: ${bestDur}min · Todas: ${ex.sets.join(', ')}`});
+            if(bestDur>0) sessions.push({date:lw.date, value:Math.round(bestDur*100)/100, detail:`Melhor série: ${formatMinSec(bestDur)} · Todas: ${ex.sets.join(', ')}`});
           }
         }
       });
