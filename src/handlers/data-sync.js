@@ -1,4 +1,4 @@
-import { verifyToken, jsonResponse } from '../../shared/utils.js';
+import { verifyToken, jsonResponse } from '../utils.js';
 
 async function getAuthedRecord(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
@@ -12,15 +12,13 @@ async function getAuthedRecord(request, env) {
   return { uKey, record: JSON.parse(raw) };
 }
 
-export async function onRequestGet(context) {
-  const { request, env } = context;
+export async function handleDataSyncGet(request, env) {
   const { error, record } = await getAuthedRecord(request, env);
   if (error) return error;
   return jsonResponse(200, { displayName: record.displayName, data: record.data, settings: record.settings });
 }
 
-export async function onRequestPost(context) {
-  const { request, env } = context;
+export async function handleDataSyncPost(request, env) {
   const { error, uKey, record } = await getAuthedRecord(request, env);
   if (error) return error;
 

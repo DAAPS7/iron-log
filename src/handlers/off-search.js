@@ -1,7 +1,6 @@
-import { jsonResponse } from '../../shared/utils.js';
+import { jsonResponse } from '../utils.js';
 
-export async function onRequestGet(context) {
-  const { request } = context;
+export async function handleOffSearch(request) {
   const url = new URL(request.url);
   const query = (url.searchParams.get('q') || '').trim();
 

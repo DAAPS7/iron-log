@@ -1,8 +1,6 @@
-import { verifyPassword, signToken, jsonResponse } from '../../shared/utils.js';
+import { verifyPassword, signToken, jsonResponse } from '../utils.js';
 
-export async function onRequestPost(context) {
-  const { request, env } = context;
-
+export async function handleAuthLogin(request, env) {
   let body;
   try {
     body = await request.json();

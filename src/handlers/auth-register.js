@@ -1,8 +1,6 @@
-import { hashPassword, signToken, isValidUsername, defaultData, defaultSettings, jsonResponse } from '../../shared/utils.js';
+import { hashPassword, signToken, isValidUsername, defaultData, defaultSettings, jsonResponse } from '../utils.js';
 
-export async function onRequestPost(context) {
-  const { request, env } = context;
-
+export async function handleAuthRegister(request, env) {
   let body;
   try {
     body = await request.json();

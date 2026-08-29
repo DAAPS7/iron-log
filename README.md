@@ -1,30 +1,31 @@
-# Iron Log — deploy no Cloudflare Pages
+# Iron Log — deploy no Cloudflare (Workers + Assets)
 
-Este projeto usa **Cloudflare Pages** para servir o site e **Pages Functions**
-(pasta `functions/`) como "servidor", com o **Cloudflare KV** a guardar as
-contas e os dados de cada utilizador (equivalente ao que era o Netlify Blobs
-na versão anterior).
+**Nota importante:** o Cloudflare tem vindo a unificar "Pages" e "Workers" num
+único produto. Os projetos novos ligados a um repositório Git são publicados
+como **Workers com ficheiros estáticos** (`[assets]` no `wrangler.toml`), já
+não como "Pages" no sentido antigo com uma pasta `functions/`. Este projeto
+está preparado para esse modelo atual.
 
 ```
 iron-log-cloudflare/
-├── wrangler.toml            ← configuração (nome do projeto, ligação ao KV)
+├── wrangler.toml            ← configuração (nome, entrada do Worker, KV, assets)
 ├── package.json
-├── public/                  ← o site (pasta de output)
+├── public/                  ← ficheiros estáticos (servidos automaticamente)
 │   ├── index.html
 │   └── favicon.svg
-├── shared/
-│   └── utils.js             ← hashing de password + tokens de sessão (Web Crypto)
-└── functions/api/
-    ├── auth-register.js     ← POST /api/auth-register
-    ├── auth-login.js        ← POST /api/auth-login
-    ├── data-sync.js         ← GET/POST /api/data-sync
-    └── off-search.js        ← GET /api/off-search (proxy para a Open Food Facts)
+└── src/
+    ├── worker.js             ← ponto de entrada: encaminha /api/* ou entrega ficheiros estáticos
+    ├── utils.js              ← hashing de password + tokens de sessão (Web Crypto)
+    └── handlers/
+        ├── auth-register.js
+        ├── auth-login.js
+        ├── data-sync.js
+        └── off-search.js
 ```
 
-Boas notícias: como as rotas em `/api/*` são detetadas automaticamente pela
-estrutura de pastas dentro de `functions/`, **não precisas de nenhum ficheiro
-de redirects** — ao contrário do Netlify, aqui não há passo de configuração
-extra para isso.
+Todos os pedidos que não comecem por `/api/` são entregues diretamente da
+pasta `public/` (via `env.ASSETS.fetch(request)` dentro do `worker.js`). Os
+pedidos a `/api/...` são tratados pelo próprio Worker.
 
 ## Passo 1 — Cria o namespace do KV
 
@@ -35,76 +36,65 @@ Precisas da [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/in
 wrangler kv namespace create USERS_KV
 ```
 
-Isto devolve algo como:
-```
-{ binding = "USERS_KV", id = "abcd1234..." }
-```
+Copia o `id` devolvido para o `wrangler.toml`, substituindo
+`REPLACE_WITH_YOUR_KV_NAMESPACE_ID`.
 
-Copia esse `id` para o `wrangler.toml` (substitui `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`).
+## Passo 2 — Publica
 
-## Passo 2 — Publica o site
-
-### Opção A: painel do Cloudflare (mais simples)
-
-1. Vai a **Cloudflare Dashboard → Workers & Pages → Create → Pages → Connect to Git**.
-2. Escolhe o teu repositório.
-3. Nas definições de build:
-   - **Build command**: (deixa vazio — não há build)
-   - **Build output directory**: `public`
-4. Depois do primeiro deploy, vai a **Settings → Functions → KV namespace
-   bindings** e adiciona uma ligação:
-   ```
-   Variable name: USERS_KV
-   KV namespace: (escolhe o que criaste no Passo 1)
-   ```
-5. Em **Settings → Environment variables**, adiciona:
-   ```
-   SESSION_SECRET = <uma string aleatória e longa>
-   ```
-   Podes gerar uma boa com `openssl rand -hex 32`.
-6. Volta a fazer deploy (Settings → Deployments → Retry deployment) para as
-   Functions passarem a usar a ligação ao KV e o segredo.
-
-### Opção B: linha de comandos (Wrangler)
+### Opção A: linha de comandos (mais direto)
 
 ```
-wrangler pages deploy public --project-name=iron-log
+wrangler deploy
 ```
 
-Depois define a ligação ao KV e o `SESSION_SECRET` da mesma forma que na
-Opção A (painel → Settings), ou via CLI:
+Isto lê o `wrangler.toml`, publica o Worker e os ficheiros de `public/`.
+
+Depois define o segredo da sessão:
 ```
-wrangler pages secret put SESSION_SECRET --project-name=iron-log
+wrangler secret put SESSION_SECRET
 ```
+(cola quando pedido uma string aleatória longa — podes gerar uma com
+`openssl rand -hex 32`)
+
+### Opção B: ligar a um repositório Git no painel
+
+1. **Workers & Pages → Create → Import a repository** (ou o botão equivalente
+   para ligar um repositório Git).
+2. O Cloudflare deteta o `wrangler.toml` automaticamente — não precisas de
+   configurar comando de build nem pasta de output manualmente.
+3. Depois do primeiro deploy, vai a **Settings → Variables and Secrets** e
+   adiciona `SESSION_SECRET` (como "Secret", não "Text").
+4. Em **Settings → Bindings**, confirma que a ligação ao KV (`USERS_KV`)
+   está presente — se o `id` no `wrangler.toml` estiver correto, isto já
+   deve vir configurado automaticamente a partir do ficheiro.
+5. Volta a fazer deploy se precisares de repetir depois de mudar variáveis.
 
 ## Testar localmente
 
 ```
-wrangler pages dev public --kv USERS_KV
+wrangler dev
 ```
 
-Isto corre o site e as Functions localmente, com o KV também emulado
-localmente (não mexe nos dados reais em produção).
+Isto corre o Worker localmente (com o KV emulado localmente também, não
+mexe nos dados reais em produção).
+
+## Se continuares a ver "Missing entry-point..."
+
+Esse erro específico significa que o Cloudflare tentou publicar isto como um
+Worker sem saber onde está o código — geralmente porque falta o campo `main`
+no `wrangler.toml`, ou porque o ficheiro `wrangler.toml` não foi encontrado
+na raiz do projeto que está a ser publicado. Confirma que o `wrangler.toml`
+está mesmo na raiz do repositório (não dentro de uma subpasta) e que tem a
+linha `main = "src/worker.js"`.
 
 ## Diferenças da versão Netlify
 
-- **Armazenamento**: Cloudflare KV em vez de Netlify Blobs. Mesma ideia
-  (chave → valor em JSON), API ligeiramente diferente, mas o resultado para
-  o utilizador é idêntico.
-- **Hashing de password**: passou de `scrypt` (módulo `crypto` do Node) para
-  `PBKDF2` via Web Crypto API nativa — porque o runtime do Cloudflare não tem
-  o módulo `crypto` do Node disponível por omissão. Continua a ser um método
-  robusto e adequado para uma app pessoal.
-- **Rotas**: já não precisas de nenhum `netlify.toml`/redirects — a estrutura
-  de pastas em `functions/api/` já define as rotas automaticamente.
-- **Sem dependências npm**: a versão Netlify precisava do pacote
-  `@netlify/blobs`; esta versão não tem nenhuma dependência — tudo usa APIs
-  nativas do runtime (KV, Web Crypto, fetch).
-
-## Nota sobre o bug do Netlify Blobs
-
-Se vieste da versão Netlify, sabes que houve ali um bug conhecido
-(`MissingBlobsEnvironmentError`) que obrigou a configurar manualmente um
-`BLOBS_SITE_ID`/`BLOBS_TOKEN`. O Cloudflare KV não tem esse problema — a
-ligação via `wrangler.toml` (dev local) ou via painel (produção) é direta,
-sem esse tipo de contorno necessário.
+- **Armazenamento**: Netlify Blobs → **Cloudflare KV**.
+- **Hashing de password**: `scrypt` (Node) → **PBKDF2 via Web Crypto API**
+  nativa, porque o runtime do Cloudflare não tem o módulo `crypto` do Node
+  disponível por omissão.
+- **Rotas**: um único `worker.js` decide, por código, se um pedido é para a
+  API ou para os ficheiros estáticos — não há ficheiro de redirects nem
+  pasta de rotas por convenção.
+- **Sem dependências npm** — tudo usa APIs nativas do runtime (KV, Web
+  Crypto, fetch, `env.ASSETS`).
