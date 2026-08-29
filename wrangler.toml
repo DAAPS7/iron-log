@@ -10,4 +10,4 @@ binding = "ASSETS"
 # pelo ID real que o comando `wrangler kv namespace create` te devolver.
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "0a86e3d7e1224a0e83c281e167282914"
