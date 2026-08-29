@@ -1,0 +1,12 @@
+name = "iron-log"
+pages_build_output_dir = "public"
+compatibility_date = "2026-01-01"
+
+# Depois de criares o namespace do KV (ver README), substitui "id" abaixo
+# pelo ID real que o comando `wrangler kv namespace create` te devolver.
+# Isto é usado sobretudo para desenvolvimento local (`wrangler pages dev`).
+# Em produção, a ligação faz-se no painel do Cloudflare (Pages → o teu
+# projeto → Settings → Functions → KV namespace bindings).
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"

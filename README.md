@@ -1,109 +1,110 @@
-# Iron Log — deploy no Netlify
+# Iron Log — deploy no Cloudflare Pages
 
-Este projeto já não é um único ficheiro HTML: tem uma pasta `public/` (o site)
-e uma pasta `netlify/functions/` (o "servidor", em forma de funções serverless
-que usam Netlify Blobs para guardar contas e dados). Por isso **não dá para
-arrastar só o `.html` para o Netlify Drop** — precisa de ser publicado como
-projeto.
-
-## Passo a passo (mais simples: Netlify CLI)
-
-1. Extrai o `.zip` e abre um terminal dentro da pasta `iron-log-netlify/`.
-2. Instala as dependências:
-   ```
-   npm install
-   ```
-3. Instala a Netlify CLI (se ainda não tiveres):
-   ```
-   npm install -g netlify-cli
-   netlify login
-   ```
-4. Faz o deploy:
-   ```
-   netlify deploy
-   ```
-   Segue as instruções (escolhe "create a new site"). Isto cria um deploy de
-   pré-visualização. Quando estiveres satisfeito:
-   ```
-   netlify deploy --prod
-   ```
-
-## Alternativa: ligar a um repositório Git
-
-1. Cria um repositório no GitHub e faz `git push` desta pasta.
-2. No painel do Netlify: **Add new site → Import an existing project** → escolhe o repositório.
-3. O Netlify vai detetar o `netlify.toml` automaticamente (publish dir `public`, functions dir `netlify/functions`). Não precisas de configurar mais nada de build.
-
-## Importante: configura o acesso às Netlify Blobs (BLOBS_SITE_ID / BLOBS_TOKEN)
-
-O Netlify devia injetar automaticamente o acesso às Blobs nas funções em
-produção — mas há um bug conhecido e recorrente da plataforma em que isso
-falha com o erro `MissingBlobsEnvironmentError`, mesmo com tudo configurado
-corretamente (ver [issue no GitHub](https://github.com/netlify/blobs/issues/175)
-e vários tópicos no fórum de suporte do Netlify sobre isto). Por isso, este
-projeto está preparado para configurar isso manualmente — e vais precisar de
-fazer isso para funcionar de forma fiável:
-
-1. **Site ID**: no painel do Netlify, vai a **Project configuration → General
-   → Project information** e copia o **Project ID** (também chamado Site ID).
-2. **Personal Access Token**: vai a **User settings → Applications → Personal
-   access tokens → New access token**, dá-lhe um nome (ex: "iron-log-blobs")
-   e copia o token gerado (só o vês uma vez).
-3. Volta ao site → **Site settings → Environment variables** e cria duas
-   variáveis:
-   ```
-   BLOBS_SITE_ID = <o Project ID que copiaste>
-   BLOBS_TOKEN   = <o Personal Access Token que copiaste>
-   ```
-4. Faz um novo deploy (ou "Trigger deploy" no painel) para as funções
-   passarem a usar estas variáveis.
-
-Se, mesmo assim, continuares a ver `MissingBlobsEnvironmentError`, é
-provável que seja um incidente de plataforma do lado do Netlify nesse
-momento — vale a pena confirmar em https://www.netlifystatus.com/ e nos
-tópicos recentes de suporte antes de continuar a mexer no código.
-
-## Importante: define o SESSION_SECRET
-
-Depois do primeiro deploy, vai a **Site settings → Environment variables** no
-painel do Netlify e cria uma variável:
+Este projeto usa **Cloudflare Pages** para servir o site e **Pages Functions**
+(pasta `functions/`) como "servidor", com o **Cloudflare KV** a guardar as
+contas e os dados de cada utilizador (equivalente ao que era o Netlify Blobs
+na versão anterior).
 
 ```
-SESSION_SECRET = <uma string aleatória e longa>
+iron-log-cloudflare/
+├── wrangler.toml            ← configuração (nome do projeto, ligação ao KV)
+├── package.json
+├── public/                  ← o site (pasta de output)
+│   ├── index.html
+│   └── favicon.svg
+├── shared/
+│   └── utils.js             ← hashing de password + tokens de sessão (Web Crypto)
+└── functions/api/
+    ├── auth-register.js     ← POST /api/auth-register
+    ├── auth-login.js        ← POST /api/auth-login
+    ├── data-sync.js         ← GET/POST /api/data-sync
+    └── off-search.js        ← GET /api/off-search (proxy para a Open Food Facts)
 ```
 
-Podes gerar uma boa localmente com:
-```
-openssl rand -hex 32
-```
+Boas notícias: como as rotas em `/api/*` são detetadas automaticamente pela
+estrutura de pastas dentro de `functions/`, **não precisas de nenhum ficheiro
+de redirects** — ao contrário do Netlify, aqui não há passo de configuração
+extra para isso.
 
-Isto é usado para assinar as sessões de login. Se não definires nada, o site
-usa um valor por omissão inseguro (definido em `netlify/functions/utils.js`)
-— funciona para testar, mas **não deixes isso em produção**.
+## Passo 1 — Cria o namespace do KV
 
-Depois de adicionar a variável, faz um novo deploy (ou "Trigger deploy" no
-painel) para as funções passarem a usá-la.
-
-## Testar localmente antes de publicar
-
-Como a app depende das funções serverless (`/api/...`), abrir o
-`public/index.html` diretamente no browser não é suficiente — os pedidos de
-login/registo vão falhar. Para testar tudo localmente, com as funções a
-correr:
+Precisas da [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
+(`npm install -g wrangler`, depois `wrangler login`).
 
 ```
-netlify dev
+wrangler kv namespace create USERS_KV
 ```
 
-Isto abre o site em `localhost` com as funções e o Netlify Blobs a funcionar
-como em produção (o Blobs tem um modo local automático).
+Isto devolve algo como:
+```
+{ binding = "USERS_KV", id = "abcd1234..." }
+```
 
-## Como os dados ficam guardados
+Copia esse `id` para o `wrangler.toml` (substitui `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`).
 
-- Cada conta fica guardada como um "blob" JSON no armazenamento do site
-  (`iron-log-users`), com a password protegida (nunca em texto simples).
-- O browser guarda uma cópia local (cache) para abrir instantaneamente e
-  continuar a funcionar offline; sincroniza com o servidor sempre que
-  gravas algo.
-- Nas Definições da app tens também "Exportar/Importar cópia (.json)" para
-  fazeres um backup pessoal dos teus próprios dados.
+## Passo 2 — Publica o site
+
+### Opção A: painel do Cloudflare (mais simples)
+
+1. Vai a **Cloudflare Dashboard → Workers & Pages → Create → Pages → Connect to Git**.
+2. Escolhe o teu repositório.
+3. Nas definições de build:
+   - **Build command**: (deixa vazio — não há build)
+   - **Build output directory**: `public`
+4. Depois do primeiro deploy, vai a **Settings → Functions → KV namespace
+   bindings** e adiciona uma ligação:
+   ```
+   Variable name: USERS_KV
+   KV namespace: (escolhe o que criaste no Passo 1)
+   ```
+5. Em **Settings → Environment variables**, adiciona:
+   ```
+   SESSION_SECRET = <uma string aleatória e longa>
+   ```
+   Podes gerar uma boa com `openssl rand -hex 32`.
+6. Volta a fazer deploy (Settings → Deployments → Retry deployment) para as
+   Functions passarem a usar a ligação ao KV e o segredo.
+
+### Opção B: linha de comandos (Wrangler)
+
+```
+wrangler pages deploy public --project-name=iron-log
+```
+
+Depois define a ligação ao KV e o `SESSION_SECRET` da mesma forma que na
+Opção A (painel → Settings), ou via CLI:
+```
+wrangler pages secret put SESSION_SECRET --project-name=iron-log
+```
+
+## Testar localmente
+
+```
+wrangler pages dev public --kv USERS_KV
+```
+
+Isto corre o site e as Functions localmente, com o KV também emulado
+localmente (não mexe nos dados reais em produção).
+
+## Diferenças da versão Netlify
+
+- **Armazenamento**: Cloudflare KV em vez de Netlify Blobs. Mesma ideia
+  (chave → valor em JSON), API ligeiramente diferente, mas o resultado para
+  o utilizador é idêntico.
+- **Hashing de password**: passou de `scrypt` (módulo `crypto` do Node) para
+  `PBKDF2` via Web Crypto API nativa — porque o runtime do Cloudflare não tem
+  o módulo `crypto` do Node disponível por omissão. Continua a ser um método
+  robusto e adequado para uma app pessoal.
+- **Rotas**: já não precisas de nenhum `netlify.toml`/redirects — a estrutura
+  de pastas em `functions/api/` já define as rotas automaticamente.
+- **Sem dependências npm**: a versão Netlify precisava do pacote
+  `@netlify/blobs`; esta versão não tem nenhuma dependência — tudo usa APIs
+  nativas do runtime (KV, Web Crypto, fetch).
+
+## Nota sobre o bug do Netlify Blobs
+
+Se vieste da versão Netlify, sabes que houve ali um bug conhecido
+(`MissingBlobsEnvironmentError`) que obrigou a configurar manualmente um
+`BLOBS_SITE_ID`/`BLOBS_TOKEN`. O Cloudflare KV não tem esse problema — a
+ligação via `wrangler.toml` (dev local) ou via painel (produção) é direta,
+sem esse tipo de contorno necessário.

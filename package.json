@@ -1,9 +1,7 @@
 {
-  "name": "iron-log",
+  "name": "iron-log-cloudflare",
   "version": "1.0.0",
   "private": true,
-  "description": "Iron Log — fitness tracker com contas e dados guardados via Netlify Blobs",
-  "dependencies": {
-    "@netlify/blobs": "^8.0.0"
-  }
+  "type": "module",
+  "description": "Iron Log — fitness tracker (Cloudflare Pages + Pages Functions + KV)"
 }
