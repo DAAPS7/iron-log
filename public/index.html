@@ -1551,17 +1551,19 @@ function renderWorkouts(){
   }
   el.innerHTML = data.workouts.map((w,i)=>{
     const exRows = w.exercises.map(ex=>{
+      const warmupPrefix = ex.warmupSets ? `+${ex.warmupSets}` : '';
+      const noteLine = ex.notes ? `<div class="small-note" style="margin-top:2px; font-style:italic;">📝 ${ex.notes}</div>` : '';
       if(ex.type==='strength'){
         return `<div class="ex-row">
           <span class="ex-tag tag-strength">Força</span>
-          <span class="ex-name">${ex.name}</span>
-          <span class="ex-detail">${ex.sets}x(${ex.minReps}-${ex.maxReps})</span>
+          <span class="ex-name">${ex.name}${noteLine}</span>
+          <span class="ex-detail">${ex.sets}${warmupPrefix}x(${ex.minReps}-${ex.maxReps})</span>
         </div>`;
       }else{
         return `<div class="ex-row">
           <span class="ex-tag tag-cardio">Cardio</span>
-          <span class="ex-name">${ex.name}</span>
-          <span class="ex-detail">${ex.sets}x${ex.duration}min</span>
+          <span class="ex-name">${ex.name}${noteLine}</span>
+          <span class="ex-detail">${ex.sets}${warmupPrefix}x${formatMinSec(ex.duration)}${ex.distance ? ` · ${ex.distance}${ex.distanceUnit||'km'}` : ''}</span>
         </div>`;
       }
     }).join('');
@@ -1663,6 +1665,7 @@ function renderBuilderList(){
           <div><label>Reps max</label><input type="number" min="1" data-i="${i}" class="bMaxReps" value="${ex.maxReps}"></div>
         </div>
         <div class="field"><label>Séries de aquecimento (opcional)</label><input type="number" min="0" data-i="${i}" class="bWarmupSets" placeholder="ex: 2" value="${ex.warmupSets ?? ''}"></div>
+        <div class="field"><label>Notas (opcional)</label><input data-i="${i}" class="bNotes" placeholder="ex: focar na técnica, tempo controlado..." value="${ex.notes || ''}"></div>
       </div>`;
     }else{
       return `<div class="exercise-builder-row">
@@ -1674,7 +1677,16 @@ function renderBuilderList(){
           <div><label>Séries</label><input type="number" min="1" data-i="${i}" class="bSets" value="${ex.sets}"></div>
           <div><label>Duração (min)</label><input type="number" min="1" data-i="${i}" class="bDuration" value="${ex.duration}"></div>
         </div>
+        <div class="field-row">
+          <div><label>Distância (opcional)</label><input type="number" min="0" step="0.1" data-i="${i}" class="bDistance" value="${ex.distance ?? ''}"></div>
+          <div><label>Unidade</label>
+            <select data-i="${i}" class="bDistanceUnit">
+              ${DISTANCE_UNITS.map(u=>`<option value="${u}" ${(ex.distanceUnit||'km')===u?'selected':''}>${u}</option>`).join('')}
+            </select>
+          </div>
+        </div>
         <div class="field"><label>Séries de aquecimento (opcional)</label><input type="number" min="0" data-i="${i}" class="bWarmupSets" placeholder="ex: 1" value="${ex.warmupSets ?? ''}"></div>
+        <div class="field"><label>Notas (opcional)</label><input data-i="${i}" class="bNotes" placeholder="ex: ritmo confortável..." value="${ex.notes || ''}"></div>
       </div>`;
     }
   }).join('');
@@ -1721,6 +1733,16 @@ function renderBuilderList(){
     const v = parseInt(e.target.value);
     builderExercises[parseInt(e.target.dataset.i)].warmupSets = (isNaN(v) || v<=0) ? null : v;
   }));
+  el.querySelectorAll('.bDistance').forEach(s=>s.addEventListener('input', e=>{
+    const v = parseFloat(e.target.value);
+    builderExercises[parseInt(e.target.dataset.i)].distance = (isNaN(v) || v<=0) ? null : v;
+  }));
+  el.querySelectorAll('.bDistanceUnit').forEach(s=>s.addEventListener('change', e=>{
+    builderExercises[parseInt(e.target.dataset.i)].distanceUnit = e.target.value;
+  }));
+  el.querySelectorAll('.bNotes').forEach(s=>s.addEventListener('input', e=>{
+    builderExercises[parseInt(e.target.dataset.i)].notes = e.target.value;
+  }));
 }
 
 function moveBuilderExercise(index, delta){
@@ -1733,11 +1755,11 @@ function moveBuilderExercise(index, delta){
 
 document.getElementById('addStrengthBtn').addEventListener('click', ()=>{
   const first = STRENGTH_EXERCISES[0];
-  builderExercises.push({type:'strength', name:first.name, muscle:first.muscle, isCustom:false, minReps:8, maxReps:12, sets:3, warmupSets:null});
+  builderExercises.push({type:'strength', name:first.name, muscle:first.muscle, isCustom:false, minReps:8, maxReps:12, sets:3, warmupSets:null, notes:''});
   renderBuilderList();
 });
 document.getElementById('addCardioBtn').addEventListener('click', ()=>{
-  builderExercises.push({type:'cardio', name:'', duration:20, sets:1, warmupSets:null});
+  builderExercises.push({type:'cardio', name:'', duration:20, sets:1, warmupSets:null, distance:null, distanceUnit:'km', notes:''});
   renderBuilderList();
 });
 document.getElementById('saveWorkoutBtn').addEventListener('click', ()=>{
@@ -1816,6 +1838,9 @@ function startSession(workoutId){
       minReps: ex.minReps, maxReps: ex.maxReps, duration: ex.duration,
       targetSets: ex.sets ?? null,
       targetWarmupSets: ex.warmupSets ?? null,
+      targetDistance: ex.distance ?? null,
+      targetDistanceUnit: ex.distanceUnit ?? 'km',
+      plannedNote: ex.notes || null,
       sets: []
     }))
   };
@@ -1844,6 +1869,9 @@ function startEditLog(logId){
         minReps: tex.minReps ?? null, maxReps: tex.maxReps ?? null, duration: tex.duration ?? null,
         targetSets: tex.sets ?? null,
         targetWarmupSets: tex.warmupSets ?? null,
+        targetDistance: tex.distance ?? null,
+        targetDistanceUnit: tex.distanceUnit ?? 'km',
+        plannedNote: tex.notes || null,
         sets: logged ? [...logged.sets] : []
       };
     });
@@ -2016,16 +2044,16 @@ function renderSession(){
         ${warmupCheckbox}
         <button class="btn btn-cardio btn-block" data-addset="${i}" style="margin-top:8px;">+ Adicionar série</button>`;
     let targetNote;
+    const warmupPrefix = ex.targetWarmupSets ? `+${ex.targetWarmupSets}` : '';
     if(ex.type==='strength'){
       targetNote = ex.minReps!=null
-        ? `Alvo: ${ex.targetSets ?? '?'} séries de ${ex.minReps}-${ex.maxReps} reps`
+        ? `Alvo: ${ex.targetSets ?? '?'}${warmupPrefix}x(${ex.minReps}-${ex.maxReps} reps)`
         : 'Exercício extra';
     }else{
       targetNote = ex.duration!=null
-        ? `Alvo: ${ex.targetSets ?? '?'} séries de ${formatMinSec(ex.duration)}`
+        ? `Alvo: ${ex.targetSets ?? '?'}${warmupPrefix}x${formatMinSec(ex.duration)}${ex.targetDistance ? ` · ${ex.targetDistance}${ex.targetDistanceUnit||'km'}` : ''}`
         : 'Exercício extra';
     }
-    if(ex.targetWarmupSets) targetNote += ` (+${ex.targetWarmupSets} aquecimento)`;
     const workingCount = ex.sets.filter(s=>!isWarmupSet(s)).length;
     const warmupCount = ex.sets.filter(s=>isWarmupSet(s)).length;
     let progressNote = ex.targetSets ? ` · ${workingCount}/${ex.targetSets} feitas` : (workingCount ? ` · ${workingCount} feita(s)` : '');
@@ -2038,6 +2066,7 @@ function renderSession(){
         <button class="remove-x" style="position:static;" data-rmex="${i}" title="Remover exercício">✕</button>
       </div>
       <div class="small-note">${targetNote}${progressNote}</div>
+      ${ex.plannedNote ? `<div class="small-note" style="font-style:italic;">📝 ${ex.plannedNote}</div>` : ''}
       <button class="btn btn-ghost btn-sm" data-history="${i}" type="button" style="margin:8px 0 4px;">📊 ${ex.type==='strength' ? 'Últimos pesos' : 'Últimos registos'}</button>
       <div>${setsHtml}</div>
       ${inputRow}
@@ -2409,10 +2438,10 @@ function renderCaloriasPlanos(){
 
   listEl.innerHTML = data.mealPlans.map(plan=>{
     const mealsHtml = plan.meals.map(meal=>{
-      const kcal = meal.foods.reduce((sum,f)=> sum + Math.round(f.per100.calories * f.quantity/100), 0);
+      const t = computeMealTotals(meal);
       return `<div class="ex-row">
         <span class="ex-name">${meal.name}</span>
-        <span class="ex-detail">${meal.foods.length} alimento(s) · ${kcal} kcal</span>
+        <span class="ex-detail">${meal.foods.length} alimento(s) · ${t.calories} kcal · P:${t.protein}g H:${t.carbs}g G:${t.fat}g</span>
       </div>`;
     }).join('');
     return `<div class="wk-card">
@@ -2469,16 +2498,23 @@ function renderMealPlanBuilder(){
   }else{
     el.innerHTML = mealPlanBuilderMeals.map((meal,mi)=>{
       const foodsHtml = meal.foods.map((f,fi)=>{
-        const kcal = Math.round(f.per100.calories * f.quantity/100);
+        const t = computeFoodTotals(f);
         return `<div class="ex-row">
           <span class="ex-name">${f.name}${f.brand?` <span style="color:var(--muted); font-weight:400;">(${f.brand})</span>`:''}</span>
-          <span class="ex-detail">${f.quantity}g · ${kcal} kcal</span>
+          <span class="ex-detail">${f.quantity}g · ${t.calories} kcal · P:${t.protein}g H:${t.carbs}g G:${t.fat}g</span>
           <button class="remove-x" style="position:static;" data-rmfood="${mi}:${fi}">✕</button>
         </div>`;
       }).join('');
+      const mealTotals = computeMealTotals(meal);
+      const moveMealButtons = `<div style="position:absolute; top:8px; right:34px; display:flex; gap:4px;">
+        <button class="remove-x" style="position:static;" data-upmeal="${mi}" ${mi===0?'disabled':''} title="Mover para cima">↑</button>
+        <button class="remove-x" style="position:static;" data-downmeal="${mi}" ${mi===mealPlanBuilderMeals.length-1?'disabled':''} title="Mover para baixo">↓</button>
+      </div>`;
       return `<div class="exercise-builder-row">
+        ${moveMealButtons}
         <button class="remove-x" data-rmmeal="${mi}">✕</button>
         <div class="field"><label>Nome da refeição</label><input class="mealNameInput" data-mi="${mi}" value="${meal.name}" placeholder="Ex: Pequeno-almoço"></div>
+        ${meal.foods.length ? `<p class="small-note" style="margin-bottom:8px;">Total: ${mealTotals.calories} kcal · P:${mealTotals.protein}g H:${mealTotals.carbs}g G:${mealTotals.fat}g</p>` : ''}
         ${foodsHtml}
         <button class="btn btn-ghost btn-block" data-addfood="${mi}" type="button" style="margin-top:8px;">+ Adicionar alimento</button>
       </div>`;
@@ -2488,6 +2524,8 @@ function renderMealPlanBuilder(){
   el.querySelectorAll('.mealNameInput').forEach(inp=>inp.addEventListener('input', e=>{
     mealPlanBuilderMeals[parseInt(e.target.dataset.mi)].name = e.target.value;
   }));
+  el.querySelectorAll('[data-upmeal]').forEach(b=>b.addEventListener('click', ()=>moveMealBuilder(parseInt(b.dataset.upmeal), -1)));
+  el.querySelectorAll('[data-downmeal]').forEach(b=>b.addEventListener('click', ()=>moveMealBuilder(parseInt(b.dataset.downmeal), 1)));
   el.querySelectorAll('[data-rmmeal]').forEach(b=>b.addEventListener('click', ()=>{
     mealPlanBuilderMeals.splice(parseInt(b.dataset.rmmeal),1);
     renderMealPlanBuilder();
@@ -2501,6 +2539,37 @@ function renderMealPlanBuilder(){
     activeMealBuilderIndex = parseInt(b.dataset.addfood);
     openFoodPicker('planFood');
   }));
+}
+
+function moveMealBuilder(index, delta){
+  const newIndex = index + delta;
+  if(newIndex<0 || newIndex>=mealPlanBuilderMeals.length) return;
+  const [item] = mealPlanBuilderMeals.splice(index,1);
+  mealPlanBuilderMeals.splice(newIndex,0,item);
+  renderMealPlanBuilder();
+}
+
+function computeFoodTotals(f){
+  const factor = f.quantity/100;
+  return {
+    calories: Math.round(f.per100.calories*factor),
+    protein: Math.round(f.per100.protein*factor*10)/10,
+    carbs: Math.round(f.per100.carbs*factor*10)/10,
+    fat: Math.round(f.per100.fat*factor*10)/10,
+  };
+}
+function computeMealTotals(meal){
+  const acc = meal.foods.reduce((acc,f)=>{
+    const t = computeFoodTotals(f);
+    acc.calories += t.calories; acc.protein += t.protein; acc.carbs += t.carbs; acc.fat += t.fat;
+    return acc;
+  }, {calories:0, protein:0, carbs:0, fat:0});
+  return {
+    calories: Math.round(acc.calories),
+    protein: Math.round(acc.protein*10)/10,
+    carbs: Math.round(acc.carbs*10)/10,
+    fat: Math.round(acc.fat*10)/10,
+  };
 }
 
 document.getElementById('addMealBtn').addEventListener('click', ()=>{
