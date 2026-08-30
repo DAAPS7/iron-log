@@ -1551,19 +1551,19 @@ function renderWorkouts(){
   }
   el.innerHTML = data.workouts.map((w,i)=>{
     const exRows = w.exercises.map(ex=>{
-      const warmupPrefix = ex.warmupSets ? `+${ex.warmupSets}` : '';
+      const warmupPrefix = ex.warmupSets ? `${ex.warmupSets}+` : '';
       const noteLine = ex.notes ? `<div class="small-note" style="margin-top:2px; font-style:italic;">📝 ${ex.notes}</div>` : '';
       if(ex.type==='strength'){
         return `<div class="ex-row">
           <span class="ex-tag tag-strength">Força</span>
           <span class="ex-name">${ex.name}${noteLine}</span>
-          <span class="ex-detail">${ex.sets}${warmupPrefix}x(${ex.minReps}-${ex.maxReps})</span>
+          <span class="ex-detail">${warmupPrefix}${ex.sets}x(${ex.minReps}-${ex.maxReps})</span>
         </div>`;
       }else{
         return `<div class="ex-row">
           <span class="ex-tag tag-cardio">Cardio</span>
           <span class="ex-name">${ex.name}${noteLine}</span>
-          <span class="ex-detail">${ex.sets}${warmupPrefix}x${formatMinSec(ex.duration)}${ex.distance ? ` · ${ex.distance}${ex.distanceUnit||'km'}` : ''}</span>
+          <span class="ex-detail">${warmupPrefix}${ex.sets}x${formatMinSec(ex.duration)}${ex.distance ? ` · ${ex.distance}${ex.distanceUnit||'km'}` : ''}</span>
         </div>`;
       }
     }).join('');
@@ -2044,14 +2044,14 @@ function renderSession(){
         ${warmupCheckbox}
         <button class="btn btn-cardio btn-block" data-addset="${i}" style="margin-top:8px;">+ Adicionar série</button>`;
     let targetNote;
-    const warmupPrefix = ex.targetWarmupSets ? `+${ex.targetWarmupSets}` : '';
+    const warmupPrefix = ex.targetWarmupSets ? `${ex.targetWarmupSets}+` : '';
     if(ex.type==='strength'){
       targetNote = ex.minReps!=null
-        ? `Alvo: ${ex.targetSets ?? '?'}${warmupPrefix}x(${ex.minReps}-${ex.maxReps} reps)`
+        ? `Alvo: ${warmupPrefix}${ex.targetSets ?? '?'}x(${ex.minReps}-${ex.maxReps} reps)`
         : 'Exercício extra';
     }else{
       targetNote = ex.duration!=null
-        ? `Alvo: ${ex.targetSets ?? '?'}${warmupPrefix}x${formatMinSec(ex.duration)}${ex.targetDistance ? ` · ${ex.targetDistance}${ex.targetDistanceUnit||'km'}` : ''}`
+        ? `Alvo: ${warmupPrefix}${ex.targetSets ?? '?'}x${formatMinSec(ex.duration)}${ex.targetDistance ? ` · ${ex.targetDistance}${ex.targetDistanceUnit||'km'}` : ''}`
         : 'Exercício extra';
     }
     const workingCount = ex.sets.filter(s=>!isWarmupSet(s)).length;
