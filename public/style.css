@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700;800&family=Unbounded:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 
 :root {
   --bg: #eef1ec;
@@ -10,13 +10,14 @@
   --strength: #e3572d;
   --cardio: #1d7874;
   --gold: #c98a1f;
+  --info: #6d5bd0;
   --danger: #c23b3b;
   --radius: 14px;
   --radius-sm: 8px;
   --shadow:
     0 1px 2px rgba(27, 33, 29, 0.06), 0 6px 20px -8px rgba(27, 33, 29, 0.12);
-  --font-display: "Anton", sans-serif;
-  --font-body: "Work Sans", sans-serif;
+  --font-display: "Unbounded", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
 }
 
 html[data-theme="dark"] {
@@ -29,8 +30,18 @@ html[data-theme="dark"] {
   --strength: #ff7a4d;
   --cardio: #3fbab3;
   --gold: #e8b84b;
+  --info: #a596f5;
   --danger: #e36a6a;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -8px rgba(0, 0, 0, 0.5);
+}
+
+html[data-font="unbounded-jakarta"] {
+  --font-display: "Unbounded", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+}
+html[data-font="anton-work"] {
+  --font-display: "Anton", sans-serif;
+  --font-body: "Work Sans", sans-serif;
 }
 
 html[data-font="bebas-inter"] {
@@ -64,6 +75,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body), sans-serif;
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
   padding-bottom: 84px;
   transition:
@@ -75,7 +87,7 @@ h2,
 h3,
 .display {
   font-family: var(--font-display), sans-serif;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   margin: 0;
@@ -263,6 +275,31 @@ main {
   color: var(--gold);
   margin-left: 5px;
   vertical-align: middle;
+}
+.notif-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  margin-left: 6px;
+  background: var(--info);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.notif-badge-dot {
+  position: absolute;
+  top: 2px;
+  right: 16px;
+  width: 9px;
+  height: 9px;
+  background: var(--info);
+  border: 2px solid var(--surface);
+  border-radius: 999px;
 }
 
 /* ---------- Bottom nav (mobile) ---------- */
@@ -829,14 +866,16 @@ fieldset {
 }
 .muscle-bar-track {
   flex: 1;
-  height: 9px;
+  height: 14px;
   background: var(--bg-soft);
-  border-radius: 5px;
+  border-radius: 999px;
   overflow: hidden;
 }
 .muscle-bar-fill {
   height: 100%;
+  border-radius: 999px;
   background: linear-gradient(90deg, var(--strength), var(--gold));
+  transition: width 0.3s ease;
 }
 .muscle-bar-val {
   width: 26px;
@@ -879,5 +918,26 @@ fieldset {
 @media (min-width: 760px) {
   .toast {
     bottom: 24px;
+  }
+}
+.draft-banner {
+  position: fixed;
+  bottom: 78px;
+  left: 16px;
+  right: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1.5px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  z-index: 210;
+}
+@media (min-width: 760px) {
+  .draft-banner {
+    bottom: 24px;
+    left: auto;
+    right: 24px;
   }
 }

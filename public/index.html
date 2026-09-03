@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Iron Log — Fitness Tracker</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Iron Log" />
+    <meta name="theme-color" content="#14171b" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -101,6 +106,13 @@
           <button data-tab="treinos">Treinos</button>
           <button data-tab="calorias">Nutrição</button>
           <button data-tab="progresso">Progresso</button>
+          <button data-tab="amigos">
+            Amigos<span
+              id="friendsBadge"
+              class="notif-badge"
+              style="display: none"
+            ></span>
+          </button>
           <button data-tab="historico">Histórico</button>
         </nav>
         <div class="header-actions">
@@ -156,6 +168,16 @@
           <div id="progressoContent"></div>
         </section>
 
+        <!-- ===================== AMIGOS ===================== -->
+        <section class="tab-panel" id="tab-amigos">
+          <div class="page-title">Amigos</div>
+          <div class="page-sub">
+            Adiciona amigos por username, partilha treinos e recebe uma
+            notificação quando alguém bate um PR.
+          </div>
+          <div id="amigosContent"></div>
+        </section>
+
         <!-- ===================== HISTORICO ===================== -->
         <section class="tab-panel" id="tab-historico">
           <div class="page-title">Histórico</div>
@@ -170,6 +192,14 @@
         <button data-tab="calorias"><span class="ico">🍽️</span>Nutrição</button>
         <button data-tab="progresso">
           <span class="ico">📈</span>Progresso
+        </button>
+        <button data-tab="amigos" style="position: relative">
+          <span class="ico">👥</span>Amigos
+          <span
+            id="friendsBadgeMobile"
+            class="notif-badge-dot"
+            style="display: none"
+          ></span>
         </button>
         <button data-tab="historico">
           <span class="ico">📋</span>Histórico
@@ -529,6 +559,20 @@
         </div>
       </div>
 
+      <!-- ===================== MODAL: SHARE WORKOUT ===================== -->
+      <div class="modal-overlay" id="modalShareWorkout">
+        <div class="modal">
+          <div class="modal-head">
+            <h2>Partilhar Treino</h2>
+            <button class="modal-close" data-close="modalShareWorkout">
+              ✕
+            </button>
+          </div>
+          <p class="small-note" id="shareWorkoutTarget"></p>
+          <div id="shareWorkoutList"></div>
+        </div>
+      </div>
+
       <!-- ===================== MODAL: SETTINGS ===================== -->
       <div class="modal-overlay" id="modalSettings">
         <div class="modal">
@@ -548,6 +592,9 @@
           <div class="field">
             <label>Tipografia</label>
             <select id="settingsFont">
+              <option value="unbounded-jakarta">
+                Unbounded / Plus Jakarta Sans
+              </option>
               <option value="anton-work">Anton / Work Sans</option>
               <option value="bebas-inter">Bebas Neue / Inter</option>
               <option value="grotesk">Space Grotesk</option>
@@ -612,6 +659,17 @@
       </div>
 
       <div class="toast" id="toast"></div>
+      <div class="draft-banner" id="draftBanner" style="display: none">
+        <p id="draftBannerText" style="margin: 0 0 10px; font-size: 13px"></p>
+        <div style="display: flex; gap: 8px">
+          <button class="btn btn-strength btn-sm" id="draftResumeBtn">
+            Continuar
+          </button>
+          <button class="btn btn-ghost btn-sm" id="draftDiscardBtn">
+            Descartar
+          </button>
+        </div>
+      </div>
     </div>
     <!-- /appShell -->
 

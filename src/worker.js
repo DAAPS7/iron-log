@@ -3,6 +3,9 @@ import { handleAuthRegister } from './handlers/auth-register.js';
 import { handleAuthLogin } from './handlers/auth-login.js';
 import { handleDataSyncGet, handleDataSyncPost } from './handlers/data-sync.js';
 import { handleOffSearch } from './handlers/off-search.js';
+import { handleFriendsSearch } from './handlers/friends-search.js';
+import { handleFriendsAction } from './handlers/friends-action.js';
+import { handleSocial } from './handlers/social.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,6 +19,9 @@ export default {
       if (pathname === '/api/data-sync' && method === 'GET') return await handleDataSyncGet(request, env);
       if (pathname === '/api/data-sync' && method === 'POST') return await handleDataSyncPost(request, env);
       if (pathname === '/api/off-search' && method === 'GET') return await handleOffSearch(request);
+      if (pathname === '/api/social' && method === 'GET') return await handleSocial(request, env);
+      if (pathname === '/api/friends-search' && method === 'GET') return await handleFriendsSearch(request, env);
+      if (pathname === '/api/friends-action' && method === 'POST') return await handleFriendsAction(request, env);
 
       if (pathname.startsWith('/api/')) {
         return jsonResponse(404, { error: 'Rota não encontrada.' });

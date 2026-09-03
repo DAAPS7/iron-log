@@ -1,4 +1,4 @@
-import { hashPassword, signToken, isValidUsername, defaultData, defaultSettings, jsonResponse } from '../utils.js';
+import { hashPassword, signToken, isValidUsername, defaultData, defaultSettings, defaultSocial, putUserRecord, jsonResponse } from '../utils.js';
 
 export async function handleAuthRegister(request, env) {
   let body;
@@ -32,9 +32,10 @@ export async function handleAuthRegister(request, env) {
       hash,
       data: defaultData(),
       settings: defaultSettings(),
+      ...defaultSocial(),
       updatedAt: new Date().toISOString(),
     };
-    await env.USERS_KV.put(uKey, JSON.stringify(record));
+    await putUserRecord(env, uKey, record);
 
     const token = await signToken(uKey, env);
     return jsonResponse(200, { token, displayName: record.displayName, data: record.data, settings: record.settings });

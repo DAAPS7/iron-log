@@ -112,6 +112,33 @@ function defaultData() {
 function defaultSettings() {
   return { theme: 'light', font: 'anton-work', accentStrength: null, accentCardio: null, radius: 14 };
 }
+function defaultSocial() {
+  return {
+    friends: [],
+    friendRequestsIncoming: [], // [{username, displayName, sentAt}]
+    friendRequestsOutgoing: [], // [username]
+    notifications: [], // [{id, type, message, read, createdAt}]
+    sharedWorkoutsInbox: [], // [{id, fromUsername, fromDisplayName, workout, receivedAt}]
+  };
+}
+
+// Grava um registo de utilizador, incluindo o displayName como metadata do
+// KV — isto permite pesquisar utilizadores por prefixo do username sem ter
+// de ler o valor completo de cada entrada candidata.
+async function putUserRecord(env, uKey, record) {
+  await env.USERS_KV.put(uKey, JSON.stringify(record), {
+    metadata: { displayName: record.displayName },
+  });
+}
+async function getUserRecord(env, uKey) {
+  const raw = await env.USERS_KV.get(uKey);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function exerciseNameFromKey(key) {
+  const idx = key.indexOf('::');
+  return idx >= 0 ? key.slice(idx + 2) : key;
+}
 
 function jsonResponse(status, obj) {
   return new Response(JSON.stringify(obj), {
@@ -128,5 +155,9 @@ export {
   isValidUsername,
   defaultData,
   defaultSettings,
+  defaultSocial,
+  putUserRecord,
+  getUserRecord,
+  exerciseNameFromKey,
   jsonResponse,
 };

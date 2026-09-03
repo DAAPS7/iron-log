@@ -61,7 +61,7 @@
           window.matchMedia("(prefers-color-scheme: dark)").matches;
         return {
           theme: prefersDark ? "dark" : "light",
-          font: "anton-work",
+          font: "unbounded-jakarta",
           accentStrength: null,
           accentCardio: null,
           radius: 14,
@@ -192,6 +192,7 @@
         showApp();
         setActiveTab("perfil");
         checkForSessionDraft();
+        loadSocialState();
         if (!data.profile) {
           setTimeout(() => openProfileModal(false), 300);
         }
@@ -587,6 +588,7 @@
         if (tab === "treinos") renderWorkouts();
         if (tab === "calorias") renderCaloriasTab();
         if (tab === "progresso") renderProgresso();
+        if (tab === "amigos") renderAmigosTab();
         if (tab === "historico") renderHistorico();
         window.scrollTo({ top: 0 });
       }
@@ -1596,31 +1598,35 @@
         const label = draft.editingLogId
           ? `edição de "${draft.workoutName}"`
           : `"${draft.workoutName}"`;
-        if (
-          confirm(
-            `Tens um registo de treino por terminar (${label}) — provavelmente por causa de um refresh ou fecho acidental. Queres continuar de onde ficaste?`,
-          )
-        ) {
-          activeSession = draft;
-          document.getElementById("sessionTitle").textContent =
-            draft.editingLogId
-              ? `Editar: ${draft.workoutName}`
-              : draft.workoutName;
-          document.getElementById("sessionDateField").style.display =
-            draft.editingLogId ? "block" : "none";
-          if (draft.editingLogId)
-            document.getElementById("sessionDateInput").value =
-              draft.date || "";
-          document.getElementById("deleteLogBtn").style.display =
-            draft.editingLogId ? "block" : "none";
-          document.getElementById("finishSessionBtn").textContent =
-            draft.editingLogId ? "Guardar alterações" : "Concluir treino";
-          resetExtraExerciseForm();
-          renderSession();
-          openModal("modalSession");
-        } else {
+        const banner = document.getElementById("draftBanner");
+        document.getElementById("draftBannerText").textContent =
+          `Tens um registo de treino por terminar (${label}) — provavelmente por causa de um refresh ou fecho acidental.`;
+        banner.style.display = "block";
+
+        document.getElementById("draftResumeBtn").onclick = () => {
+          banner.style.display = "none";
+          resumeSessionDraft(draft);
+        };
+        document.getElementById("draftDiscardBtn").onclick = () => {
+          banner.style.display = "none";
           clearSessionDraft();
-        }
+        };
+      }
+      function resumeSessionDraft(draft) {
+        activeSession = draft;
+        document.getElementById("sessionTitle").textContent =
+          draft.editingLogId ? `Editar: ${draft.workoutName}` : draft.workoutName;
+        document.getElementById("sessionDateField").style.display =
+          draft.editingLogId ? "block" : "none";
+        if (draft.editingLogId)
+          document.getElementById("sessionDateInput").value = draft.date || "";
+        document.getElementById("deleteLogBtn").style.display =
+          draft.editingLogId ? "block" : "none";
+        document.getElementById("finishSessionBtn").textContent =
+          draft.editingLogId ? "Guardar alterações" : "Concluir treino";
+        resetExtraExerciseForm();
+        renderSession();
+        openModal("modalSession");
       }
 
       function startSession(workoutId) {
@@ -2261,6 +2267,37 @@
         else renderCaloriasPlanos();
       }
 
+      function updateMacroGoalCaloriesNote() {
+        const note = document.getElementById("macroGoalCaloriesNote");
+        if (!note) return;
+        const p = parseFloat(document.getElementById("protGoalInput").value);
+        const c = parseFloat(document.getElementById("carbGoalInput").value);
+        const f = parseFloat(document.getElementById("fatGoalInput").value);
+        const g = parseFloat(document.getElementById("calGoalInput").value);
+        const hasAny = !isNaN(p) || !isNaN(c) || !isNaN(f);
+        if (!hasAny) {
+          note.textContent = "";
+          return;
+        }
+        // Proteína e hidratos ≈ 4 kcal/g, gordura ≈ 9 kcal/g
+        const kcalFromMacros = Math.round(
+          (isNaN(p) ? 0 : p) * 4 + (isNaN(c) ? 0 : c) * 4 + (isNaN(f) ? 0 : f) * 9,
+        );
+        let msg = `Estes macros correspondem a ≈ ${kcalFromMacros} kcal.`;
+        if (!isNaN(g) && g > 0) {
+          const diff = kcalFromMacros - g;
+          if (Math.abs(diff) > 15) {
+            msg +=
+              diff > 0
+                ? ` Isso é ${diff} kcal acima da meta de calorias que definiste.`
+                : ` Isso é ${Math.abs(diff)} kcal abaixo da meta de calorias que definiste.`;
+          } else {
+            msg += " Está alinhado com a tua meta de calorias.";
+          }
+        }
+        note.textContent = msg;
+      }
+
       function macroBarHtml(label, value, goalVal, colorVar) {
         const p = goalVal
           ? Math.max(0, Math.min(100, (value / goalVal) * 100))
@@ -2327,6 +2364,7 @@
         <div class="field"><label>Hidratos (g)</label><input type="number" min="0" id="carbGoalInput" placeholder="ex: 220" value="${mg.carbs ?? ""}"></div>
         <div class="field"><label>Gordura (g)</label><input type="number" min="0" id="fatGoalInput" placeholder="ex: 70" value="${mg.fat ?? ""}"></div>
       </div>
+      <p class="small-note" id="macroGoalCaloriesNote" style="margin-top:-6px; margin-bottom:12px;"></p>
       <button class="btn btn-ghost btn-block" id="calGoalSaveBtn">Guardar metas</button>
     </div>
 
@@ -2389,6 +2427,14 @@
             selectedCalorieDate = e.target.value;
             renderCaloriasDiario();
           });
+        ["protGoalInput", "carbGoalInput", "fatGoalInput", "calGoalInput"].forEach(
+          (id) => {
+            document
+              .getElementById(id)
+              .addEventListener("input", updateMacroGoalCaloriesNote);
+          },
+        );
+        updateMacroGoalCaloriesNote();
         document
           .getElementById("calGoalSaveBtn")
           .addEventListener("click", () => {
@@ -3397,6 +3443,357 @@
         });
       }
 
+      /* ===================== AMIGOS TAB ===================== */
+
+      let socialState = {
+        friends: [],
+        incoming: [],
+        outgoing: [],
+        notifications: [],
+        sharedWorkoutsInbox: [],
+      };
+
+      async function apiSocialGet() {
+        const res = await fetch(`${API_BASE}/social`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erro");
+        return json;
+      }
+      async function apiFriendsSearch(q) {
+        const res = await fetch(
+          `${API_BASE}/friends-search?q=${encodeURIComponent(q)}`,
+          { headers: { Authorization: `Bearer ${authToken}` } },
+        );
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erro");
+        return json.results;
+      }
+      async function apiFriendsAction(payload) {
+        const res = await fetch(`${API_BASE}/friends-action`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erro");
+        return json;
+      }
+
+      async function loadSocialState() {
+        try {
+          socialState = await apiSocialGet();
+        } catch (e) {
+          console.error("Erro ao carregar estado social:", e);
+        }
+        updateFriendsBadge();
+      }
+      function updateFriendsBadge() {
+        const total =
+          socialState.notifications.filter((n) => !n.read).length +
+          socialState.incoming.length;
+        const badge = document.getElementById("friendsBadge");
+        const badgeMobile = document.getElementById("friendsBadgeMobile");
+        if (badge) {
+          badge.style.display = total > 0 ? "inline-flex" : "none";
+          badge.textContent = total > 9 ? "9+" : String(total);
+        }
+        if (badgeMobile) {
+          badgeMobile.style.display = total > 0 ? "block" : "none";
+        }
+      }
+
+      async function renderAmigosTab() {
+        await loadSocialState();
+        const el = document.getElementById("amigosContent");
+
+        const incomingHtml = socialState.incoming.length
+          ? `<div class="card" style="margin-bottom:14px;">
+              <div class="card-title">Pedidos de amizade</div>
+              ${socialState.incoming
+                .map(
+                  (r) => `
+                <div class="ex-row">
+                  <span class="ex-name">${r.displayName}</span>
+                  <div style="display:flex; gap:6px;">
+                    <button class="btn btn-strength btn-sm" data-accept="${r.username}">Aceitar</button>
+                    <button class="btn btn-danger-ghost btn-sm" data-reject="${r.username}">Recusar</button>
+                  </div>
+                </div>`,
+                )
+                .join("")}
+            </div>`
+          : "";
+
+        const notifHtml = socialState.notifications.length
+          ? `<div class="card" style="margin-bottom:14px;">
+              <div class="card-title">Notificações
+                <button class="btn btn-ghost btn-sm" id="markAllReadBtn">Marcar todas como lidas</button>
+              </div>
+              ${socialState.notifications
+                .slice(0, 20)
+                .map(
+                  (n) => `
+                <div class="log-item" style="${n.read ? "opacity:0.6;" : ""}">
+                  <div class="log-item-ex">${n.message}</div>
+                  <div class="small-note">${formatDate(n.createdAt.slice(0, 10))}</div>
+                </div>`,
+                )
+                .join("")}
+            </div>`
+          : "";
+
+        const sharedHtml = socialState.sharedWorkoutsInbox.length
+          ? `<div class="card" style="margin-bottom:14px;">
+              <div class="card-title">Treinos partilhados contigo</div>
+              ${socialState.sharedWorkoutsInbox
+                .map(
+                  (s) => `
+                <div class="wk-card">
+                  <div class="wk-head">
+                    <div><h3>${s.workout.name}</h3><div class="wk-meta">de ${s.fromDisplayName}</div></div>
+                  </div>
+                  <div style="display:flex; gap:8px; margin-top:8px;">
+                    <button class="btn btn-strength btn-sm" data-import-shared="${s.id}">+ Adicionar aos meus treinos</button>
+                    <button class="btn btn-ghost btn-sm" data-dismiss-shared="${s.id}">Dispensar</button>
+                  </div>
+                </div>`,
+                )
+                .join("")}
+            </div>`
+          : "";
+
+        const friendsHtml = socialState.friends.length
+          ? socialState.friends
+              .map(
+                (f) => `
+              <div class="ex-row">
+                <span class="ex-name">${f.displayName}</span>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn btn-ghost btn-sm" data-share="${f.username}">Partilhar treino</button>
+                  <button class="btn btn-danger-ghost btn-sm" data-unfriend="${f.username}">Remover</button>
+                </div>
+              </div>`,
+              )
+              .join("")
+          : `<p class="small-note">Ainda sem amigos. Pesquisa um nome de utilizador acima.</p>`;
+
+        const outgoingNote = socialState.outgoing.length
+          ? `<p class="small-note">Pedidos enviados, a aguardar resposta: ${socialState.outgoing.join(", ")}</p>`
+          : "";
+
+        el.innerHTML = `
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-title">Adicionar amigo</div>
+            <div class="field-row">
+              <input id="friendSearchInput" placeholder="Nome de utilizador">
+              <button class="btn btn-ghost" id="friendSearchBtn" type="button">Pesquisar</button>
+            </div>
+            <div id="friendSearchResults"></div>
+            ${outgoingNote}
+          </div>
+          ${incomingHtml}
+          ${notifHtml}
+          ${sharedHtml}
+          <div class="card">
+            <div class="card-title">Os teus amigos</div>
+            ${friendsHtml}
+          </div>
+        `;
+
+        document
+          .getElementById("friendSearchBtn")
+          .addEventListener("click", async () => {
+            const q = document
+              .getElementById("friendSearchInput")
+              .value.trim();
+            const resultsEl = document.getElementById("friendSearchResults");
+            if (q.length < 2) {
+              showToast("Escreve pelo menos 2 caracteres.");
+              return;
+            }
+            try {
+              const results = await apiFriendsSearch(q);
+              const known = new Set([
+                ...socialState.friends.map((f) => f.username),
+                ...socialState.outgoing,
+              ]);
+              resultsEl.innerHTML = results.length
+                ? results
+                    .map(
+                      (r) => `
+                  <div class="ex-row">
+                    <span class="ex-name">${r.displayName}</span>
+                    ${
+                      known.has(r.username)
+                        ? `<span class="small-note">já amigo(a) ou pedido enviado</span>`
+                        : `<button class="btn btn-strength btn-sm" data-addfriend="${r.username}">+ Adicionar</button>`
+                    }
+                  </div>`,
+                    )
+                    .join("")
+                : `<p class="small-note">Sem resultados.</p>`;
+              resultsEl
+                .querySelectorAll("[data-addfriend]")
+                .forEach((b) =>
+                  b.addEventListener("click", async () => {
+                    try {
+                      await apiFriendsAction({
+                        action: "request",
+                        targetUsername: b.dataset.addfriend,
+                      });
+                      showToast("Pedido enviado.");
+                      renderAmigosTab();
+                    } catch (e) {
+                      showToast(e.message);
+                    }
+                  }),
+                );
+            } catch (e) {
+              showToast(e.message);
+            }
+          });
+
+        el.querySelectorAll("[data-accept]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            try {
+              await apiFriendsAction({
+                action: "respond",
+                fromUsername: b.dataset.accept,
+                accept: true,
+              });
+              showToast("Pedido aceite.");
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          }),
+        );
+        el.querySelectorAll("[data-reject]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            try {
+              await apiFriendsAction({
+                action: "respond",
+                fromUsername: b.dataset.reject,
+                accept: false,
+              });
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          }),
+        );
+        el.querySelectorAll("[data-unfriend]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            if (!confirm("Remover este amigo?")) return;
+            try {
+              await apiFriendsAction({
+                action: "remove",
+                username: b.dataset.unfriend,
+              });
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          }),
+        );
+        el.querySelectorAll("[data-share]").forEach((b) =>
+          b.addEventListener("click", () =>
+            openShareWorkoutModal(b.dataset.share),
+          ),
+        );
+        el.querySelectorAll("[data-import-shared]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            const shared = socialState.sharedWorkoutsInbox.find(
+              (s) => s.id === b.dataset.importShared,
+            );
+            if (!shared) return;
+            const imported = { ...shared.workout, id: uid() };
+            data.workouts.push(imported);
+            saveData();
+            try {
+              await apiFriendsAction({
+                action: "dismiss-shared-workout",
+                id: shared.id,
+              });
+            } catch (e) {}
+            showToast("Treino adicionado aos teus treinos.");
+            renderAmigosTab();
+          }),
+        );
+        el.querySelectorAll("[data-dismiss-shared]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            try {
+              await apiFriendsAction({
+                action: "dismiss-shared-workout",
+                id: b.dataset.dismissShared,
+              });
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          }),
+        );
+        const markAllBtn = document.getElementById("markAllReadBtn");
+        if (markAllBtn) {
+          markAllBtn.addEventListener("click", async () => {
+            try {
+              await apiFriendsAction({ action: "mark-notifications-read" });
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          });
+        }
+      }
+
+      function openShareWorkoutModal(friendUsername) {
+        const friend = socialState.friends.find(
+          (f) => f.username === friendUsername,
+        );
+        document.getElementById("shareWorkoutTarget").textContent = friend
+          ? `A partilhar com ${friend.displayName}:`
+          : "";
+        const listEl = document.getElementById("shareWorkoutList");
+        if (!data.workouts.length) {
+          listEl.innerHTML = `<p class="small-note">Ainda não tens nenhum treino criado.</p>`;
+        } else {
+          listEl.innerHTML = data.workouts
+            .map(
+              (w) => `
+            <div class="ex-row">
+              <span class="ex-name">${w.name}</span>
+              <button class="btn btn-strength btn-sm" data-do-share="${w.id}">Partilhar</button>
+            </div>`,
+            )
+            .join("");
+          listEl.querySelectorAll("[data-do-share]").forEach((b) =>
+            b.addEventListener("click", async () => {
+              const workout = data.workouts.find(
+                (w) => w.id === b.dataset.doShare,
+              );
+              if (!workout) return;
+              try {
+                await apiFriendsAction({
+                  action: "share-workout",
+                  friendUsername,
+                  workout,
+                });
+                showToast("Treino partilhado.");
+                closeModal("modalShareWorkout");
+              } catch (e) {
+                showToast(e.message);
+              }
+            }),
+          );
+        }
+        openModal("modalShareWorkout");
+      }
+
       /* ===================== HISTORICO TAB ===================== */
 
       function renderHistorico() {
@@ -3478,6 +3875,7 @@
           showApp();
           setActiveTab("perfil");
           checkForSessionDraft();
+          loadSocialState();
 
           try {
             const res = await apiLoad(authToken);
