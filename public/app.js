@@ -53,6 +53,10 @@
           macroGoals: { protein: null, carbs: null, fat: null },
           exercisePRs: {},
           mealPlans: [],
+          metricGoals: {
+            bodyFat: { target: null, targetDate: null },
+            weight: { target: null, targetDate: null },
+          },
         };
       }
       function defaultSettings() {
@@ -392,6 +396,9 @@
           updateProgressView(progressSelected);
       }
 
+      document
+        .getElementById("friendsHeaderBtn")
+        .addEventListener("click", () => setActiveTab("amigos"));
       document.getElementById("settingsBtn").addEventListener("click", () => {
         syncSettingsControls(currentSettings);
         openModal("modalSettings");
@@ -584,6 +591,9 @@
           .forEach((b) => {
             b.classList.toggle("active", b.dataset.tab === tab);
           });
+        document
+          .getElementById("friendsHeaderBtn")
+          .classList.toggle("icon-btn-active", tab === "amigos");
         if (tab === "perfil") renderPerfil();
         if (tab === "treinos") renderWorkouts();
         if (tab === "calorias") renderCaloriasTab();
@@ -637,7 +647,7 @@
         if (!data.profile) {
           el.innerHTML = `<div class="empty">
       <div class="display">Sem perfil ainda</div>
-      <p>Configura as tuas medidas para veres o IMC e o metabolismo basal.</p>
+      <p>Configura as tuas medidas para veres a tua gordura corporal e o metabolismo basal.</p>
       <button class="btn btn-strength" id="startOnboardingBtn">Configurar perfil</button>
     </div>`;
           document
@@ -649,42 +659,37 @@
         const p = data.profile;
         const age = computeAge(p.birthdate);
         const weight = getCurrentWeight();
-        const bmi = weight ? computeBMI(weight, p.height) : null;
         const bf = computeBodyFat(p.gender, p.height, p.waist, p.neck, p.hip);
         const bmr = weight ? computeBMR(p.gender, weight, p.height, age) : null;
 
-        const bmiPct = bmi
-          ? Math.max(0, Math.min(100, ((bmi - 15) / (40 - 15)) * 100))
-          : 0;
         const bfPct =
           bf != null ? Math.max(0, Math.min(100, (bf / 45) * 100)) : 0;
 
         el.innerHTML = `
-  <div class="grid grid-3" style="margin-bottom:14px;">
-    ${ringCard("IMC", bmi ?? "—", "", bmiPct, bmi ? classifyBMI(bmi) : "", ringColorForBMI(bmi))}
-    ${ringCard("Gordura Corporal", bf ?? "—", bf != null ? "%" : "", bfPct, bf != null ? classifyBodyFat(bf, p.gender) : "sem dados", "var(--strength)")}
-    <div class="card">
+  <div class="grid grid-2" style="margin-bottom:14px;">
+    ${ringCard("Gordura Corporal", bf ?? "—", bf != null ? "%" : "", bfPct, bf != null ? classifyBodyFat(bf, p.gender) : "sem dados", "var(--strength)", "card-clickable", 'data-metric="bodyfat"')}
+    <div class="card card-clickable card-accent-info" data-metric="bmr">
       <div class="card-title">Metabolismo Basal</div>
       <div style="display:flex; align-items:baseline; gap:6px; margin-top:8px;">
-        <span class="display" style="font-size:34px;">${bmr ?? "—"}</span>
+        <span class="display" style="font-size:34px; color:var(--info);">${bmr ?? "—"}</span>
         <span style="color:var(--muted); font-size:12px;">kcal / dia</span>
       </div>
-      <div class="small-note">Energia gasta em repouso.</div>
+      <div class="small-note">Energia gasta em repouso. Toca para saberes mais.</div>
     </div>
   </div>
 
   <div class="grid grid-2" style="margin-bottom:14px;">
-    <div class="card">
+    <div class="card card-clickable card-accent-cardio" data-metric="weight">
       <div class="card-title">Peso Atual
         <button class="btn btn-ghost btn-sm" id="logWeightBtn">+ Registar</button>
       </div>
       <div style="display:flex; align-items:baseline; gap:6px; margin:6px 0 10px;">
-        <span class="display" style="font-size:34px;">${weight ?? "—"}</span>
+        <span class="display" style="font-size:34px; color:var(--cardio);">${weight ?? "—"}</span>
         <span style="color:var(--muted); font-size:12px;">kg</span>
       </div>
       <canvas id="weightChart" height="90" style="width:100%;"></canvas>
     </div>
-    <div class="card">
+    <div class="card card-accent-gold">
       <div class="card-title">Perfil
         <button class="btn btn-ghost btn-sm" id="editProfileBtn">Editar</button>
       </div>
@@ -699,7 +704,8 @@
 
         document
           .getElementById("logWeightBtn")
-          .addEventListener("click", () => {
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
             document.getElementById("wDate").value = new Date()
               .toISOString()
               .slice(0, 10);
@@ -708,7 +714,17 @@
           });
         document
           .getElementById("editProfileBtn")
-          .addEventListener("click", () => openProfileModal(true));
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            openProfileModal(true);
+          });
+
+        el.querySelectorAll("[data-metric]").forEach((card) => {
+          card.addEventListener("click", (e) => {
+            if (e.target.closest("button")) return;
+            openMetricInsight(card.dataset.metric, { bf, bmr, weight, p, age });
+          });
+        });
 
         drawWeightChart();
       }
@@ -720,11 +736,125 @@
         return "var(--strength)";
       }
 
-      function ringCard(label, value, unit, pct, tag, color) {
+      function openMetricInsight(metric, ctx) {
+        const titleEl = document.getElementById("metricInsightTitle");
+        const bodyEl = document.getElementById("metricInsightBody");
+
+        if (metric === "bodyfat") {
+          titleEl.textContent = "Gordura Corporal";
+          const bf = ctx.bf;
+          const goal = (data.metricGoals && data.metricGoals.bodyFat) || {
+            target: null,
+            targetDate: null,
+          };
+          let progressNote = "";
+          if (bf != null && goal.target != null) {
+            const diff = Math.round((bf - goal.target) * 10) / 10;
+            progressNote =
+              diff <= 0
+                ? "Já atingiste (ou ultrapassaste) esta meta!"
+                : `Faltam ${diff} pontos percentuais para a meta.`;
+          }
+          bodyEl.innerHTML = `
+            <p class="small-note" style="margin-top:0;">Esta é uma estimativa (método da Marinha dos EUA) baseada nas medidas que introduziste — não substitui uma avaliação profissional (ex: bioimpedância ou DEXA), mas serve bem para acompanhar tendências ao longo do tempo.</p>
+            <p class="small-note">A percentagem de gordura tende a descer de forma sustentável com treino de força regular, alguma atividade cardiovascular, e um défice calórico moderado e consistente. Métodos extremos ou mudanças muito rápidas costumam ser difíceis de manter — fala com um profissional de saúde antes de perseguires um objetivo agressivo.</p>
+            <div class="card-title" style="margin-top:16px;">Definir meta (opcional)</div>
+            <div class="field-row">
+              <div class="field"><label>Gordura alvo (%)</label><input type="number" min="0" step="0.1" id="goalBodyFatTarget" value="${goal.target ?? ""}"></div>
+              <div class="field"><label>Data alvo</label><input type="date" id="goalBodyFatDate" value="${goal.targetDate ?? ""}"></div>
+            </div>
+            ${progressNote ? `<p class="small-note">${progressNote}</p>` : ""}
+            <button class="btn btn-strength btn-block" id="saveBodyFatGoalBtn">Guardar meta</button>
+          `;
+          document
+            .getElementById("saveBodyFatGoalBtn")
+            .addEventListener("click", () => {
+              const t = parseFloat(
+                document.getElementById("goalBodyFatTarget").value,
+              );
+              const d = document.getElementById("goalBodyFatDate").value;
+              data.metricGoals = data.metricGoals || {};
+              data.metricGoals.bodyFat = {
+                target: isNaN(t) ? null : t,
+                targetDate: d || null,
+              };
+              saveData();
+              showToast("Meta guardada.");
+              closeModal("modalMetricInsight");
+            });
+        } else if (metric === "bmr") {
+          titleEl.textContent = "Metabolismo Basal (BMR)";
+          bodyEl.innerHTML = `
+            <p class="small-note" style="margin-top:0;">O BMR é uma estimativa das calorias que o teu corpo gasta em repouso completo, só para manter as funções vitais — não inclui a energia que gastas a mexer-te ao longo do dia.</p>
+            <p class="small-note">Depende sobretudo da tua massa muscular, idade, altura e peso. Não é algo que se "melhore" diretamente, mas manter ou aumentar massa muscular através de treino de força tende a sustentar (ou aumentar ligeiramente) este valor ao longo do tempo, já que o músculo consome mais energia em repouso do que a gordura.</p>
+            <p class="small-note">Costuma ser usado como ponto de partida para estimar as tuas necessidades calóricas totais, juntando depois o teu nível de atividade física.</p>
+          `;
+        } else if (metric === "weight") {
+          titleEl.textContent = "Peso Corporal";
+          const weight = ctx.weight;
+          const goal = (data.metricGoals && data.metricGoals.weight) || {
+            target: null,
+            targetDate: null,
+          };
+          let progressNote = "";
+          if (weight != null && goal.target != null) {
+            const diff = Math.round((weight - goal.target) * 10) / 10;
+            if (diff === 0) {
+              progressNote = "Já estás na tua meta!";
+            } else {
+              let dateNote = "";
+              if (goal.targetDate) {
+                const daysLeft = Math.ceil(
+                  (new Date(goal.targetDate) - new Date()) /
+                    (1000 * 60 * 60 * 24),
+                );
+                if (daysLeft > 0) {
+                  const weeklyRate = Math.abs(diff) / (daysLeft / 7);
+                  dateNote = ` Faltam ${daysLeft} dia(s) — uma média de ≈${Math.round(weeklyRate * 100) / 100} kg/semana.`;
+                } else {
+                  dateNote = " A data alvo já passou.";
+                }
+              }
+              progressNote = `Faltam ${Math.abs(diff)} kg para a meta.${dateNote}`;
+            }
+          }
+          bodyEl.innerHTML = `
+            <p class="small-note" style="margin-top:0;">O teu peso pode variar de dia para dia por razões normais (hidratação, alimentação, sono) — o que importa é a tendência ao longo de várias semanas, não um valor isolado.</p>
+            <p class="small-note">Uma referência geralmente considerada sustentável é uma variação de cerca de 0.25% a 1% do peso corporal por semana, dependendo do objetivo. Ritmos muito mais rápidos tendem a ser difíceis de manter e podem trazer efeitos indesejados — fala com um profissional de saúde para uma orientação personalizada.</p>
+            <div class="card-title" style="margin-top:16px;">Definir meta (opcional)</div>
+            <div class="field-row">
+              <div class="field"><label>Peso alvo (kg)</label><input type="number" min="0" step="0.1" id="goalWeightTarget" value="${goal.target ?? ""}"></div>
+              <div class="field"><label>Data alvo</label><input type="date" id="goalWeightDate" value="${goal.targetDate ?? ""}"></div>
+            </div>
+            ${progressNote ? `<p class="small-note">${progressNote}</p>` : ""}
+            <button class="btn btn-strength btn-block" id="saveWeightGoalBtn">Guardar meta</button>
+          `;
+          document
+            .getElementById("saveWeightGoalBtn")
+            .addEventListener("click", () => {
+              const t = parseFloat(
+                document.getElementById("goalWeightTarget").value,
+              );
+              const d = document.getElementById("goalWeightDate").value;
+              data.metricGoals = data.metricGoals || {};
+              data.metricGoals.weight = {
+                target: isNaN(t) ? null : t,
+                targetDate: d || null,
+              };
+              saveData();
+              showToast("Meta guardada.");
+              closeModal("modalMetricInsight");
+            });
+        }
+
+        openModal("modalMetricInsight");
+      }
+
+      function ringCard(label, value, unit, pct, tag, color, extraClass, extraAttrs) {
         const r = 48,
           c = 2 * Math.PI * r;
         const offset = c - (pct / 100) * c;
-        return `<div class="card ring-card">
+        return `<div class="card ring-card${extraClass ? " " + extraClass : ""}"${extraAttrs ? " " + extraAttrs : ""}>
     <div class="card-title" style="width:100%;">${label}</div>
     <div class="ring-wrap">
       <svg width="118" height="118" viewBox="0 0 118 118">
@@ -3493,17 +3623,10 @@
         updateFriendsBadge();
       }
       function updateFriendsBadge() {
-        const total =
-          socialState.notifications.filter((n) => !n.read).length +
-          socialState.incoming.length;
+        const total = socialState.notifications.length + socialState.incoming.length;
         const badge = document.getElementById("friendsBadge");
-        const badgeMobile = document.getElementById("friendsBadgeMobile");
         if (badge) {
-          badge.style.display = total > 0 ? "inline-flex" : "none";
-          badge.textContent = total > 9 ? "9+" : String(total);
-        }
-        if (badgeMobile) {
-          badgeMobile.style.display = total > 0 ? "block" : "none";
+          badge.style.display = total > 0 ? "block" : "none";
         }
       }
 
@@ -3532,14 +3655,17 @@
         const notifHtml = socialState.notifications.length
           ? `<div class="card" style="margin-bottom:14px;">
               <div class="card-title">Notificações
-                <button class="btn btn-ghost btn-sm" id="markAllReadBtn">Marcar todas como lidas</button>
+                <button class="btn btn-ghost btn-sm" id="clearAllNotifBtn">Limpar todas</button>
               </div>
               ${socialState.notifications
                 .slice(0, 20)
                 .map(
                   (n) => `
-                <div class="log-item" style="${n.read ? "opacity:0.6;" : ""}">
-                  <div class="log-item-ex">${n.message}</div>
+                <div class="log-item">
+                  <div class="log-item-head">
+                    <span class="log-item-ex" style="margin-top:0;">${n.message}</span>
+                    <button class="remove-x" style="position:static;" data-dismiss-notif="${n.id}" title="Dispensar">✕</button>
+                  </div>
                   <div class="small-note">${formatDate(n.createdAt.slice(0, 10))}</div>
                 </div>`,
                 )
@@ -3738,11 +3864,24 @@
             }
           }),
         );
-        const markAllBtn = document.getElementById("markAllReadBtn");
-        if (markAllBtn) {
-          markAllBtn.addEventListener("click", async () => {
+        el.querySelectorAll("[data-dismiss-notif]").forEach((b) =>
+          b.addEventListener("click", async () => {
             try {
-              await apiFriendsAction({ action: "mark-notifications-read" });
+              await apiFriendsAction({
+                action: "dismiss-notification",
+                id: b.dataset.dismissNotif,
+              });
+              renderAmigosTab();
+            } catch (e) {
+              showToast(e.message);
+            }
+          }),
+        );
+        const clearAllBtn = document.getElementById("clearAllNotifBtn");
+        if (clearAllBtn) {
+          clearAllBtn.addEventListener("click", async () => {
+            try {
+              await apiFriendsAction({ action: "clear-notifications" });
               renderAmigosTab();
             } catch (e) {
               showToast(e.message);

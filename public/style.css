@@ -217,6 +217,10 @@ button {
   border-color: var(--ink);
   color: var(--ink);
 }
+.icon-btn-active {
+  border-color: var(--info);
+  background: color-mix(in srgb, var(--info) 14%, var(--surface));
+}
 
 main {
   max-width: 920px;
@@ -293,8 +297,8 @@ main {
 }
 .notif-badge-dot {
   position: absolute;
-  top: 2px;
-  right: 16px;
+  top: 3px;
+  right: 3px;
   width: 9px;
   height: 9px;
   background: var(--info);
@@ -391,6 +395,25 @@ main {
   border-radius: var(--radius);
   padding: 18px;
   box-shadow: var(--shadow);
+}
+.card-clickable {
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
+}
+.card-clickable:hover {
+  border-color: var(--muted);
+  transform: translateY(-2px);
+}
+.card-accent-info {
+  border-left: 3px solid var(--info);
+}
+.card-accent-cardio {
+  border-left: 3px solid var(--cardio);
+}
+.card-accent-gold {
+  border-left: 3px solid var(--gold);
 }
 .card-title {
   font-size: 11px;

@@ -124,14 +124,14 @@ export async function handleFriendsAction(request, env) {
       return jsonResponse(200, { ok: true });
     }
 
-    if (action === 'mark-notifications-read') {
-      if (body.id) {
-        self.notifications = self.notifications.map((n) =>
-          n.id === body.id ? { ...n, read: true } : n
-        );
-      } else {
-        self.notifications = self.notifications.map((n) => ({ ...n, read: true }));
-      }
+    if (action === 'dismiss-notification') {
+      self.notifications = self.notifications.filter((n) => n.id !== body.id);
+      await putUserRecord(env, selfKey, self);
+      return jsonResponse(200, { ok: true });
+    }
+
+    if (action === 'clear-notifications') {
+      self.notifications = [];
       await putUserRecord(env, selfKey, self);
       return jsonResponse(200, { ok: true });
     }
