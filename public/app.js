@@ -59,6 +59,16 @@
             bodyFat: { target: null, targetDate: null },
             weight: { target: null, targetDate: null },
           },
+          weeklySchedule: {
+            mon: null,
+            tue: null,
+            wed: null,
+            thu: null,
+            fri: null,
+            sat: null,
+            sun: null,
+          },
+          lastWeeklyReviewWeek: null,
         };
       }
       function defaultSettings() {
@@ -199,6 +209,7 @@
         setActiveTab("perfil");
         checkForSessionDraft();
         loadSocialState();
+        checkWeeklyReview();
         if (!data.profile) {
           setTimeout(() => openProfileModal(false), 300);
         }
@@ -1512,6 +1523,7 @@
       /* ===================== TREINOS TAB ===================== */
 
       function renderWorkouts() {
+        renderScheduleTodayBanner();
         const el = document.getElementById("workoutsList");
         if (!data.workouts.length) {
           el.innerHTML = `<div class="empty">
@@ -1640,6 +1652,172 @@
       document
         .getElementById("freeSessionBtn")
         .addEventListener("click", () => startFreeSession());
+
+      /* ---- Plano Semanal ---- */
+
+      const WEEKDAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+      const WEEKDAY_LABELS = {
+        mon: "Segunda",
+        tue: "Terça",
+        wed: "Quarta",
+        thu: "Quinta",
+        fri: "Sexta",
+        sat: "Sábado",
+        sun: "Domingo",
+      };
+
+      function getWeekdayKey(date) {
+        // date.getDay(): 0=Domingo...6=Sábado
+        const map = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+        return map[date.getDay()];
+      }
+
+      function ensureWeeklySchedule() {
+        if (!data.weeklySchedule) {
+          data.weeklySchedule = {
+            mon: null,
+            tue: null,
+            wed: null,
+            thu: null,
+            fri: null,
+            sat: null,
+            sun: null,
+          };
+        }
+      }
+
+      function renderWeeklyScheduleForm() {
+        ensureWeeklySchedule();
+        const el = document.getElementById("weeklyScheduleForm");
+        if (!data.workouts.length) {
+          el.innerHTML = `<p class="small-note">Cria pelo menos um treino antes de montares o plano semanal.</p>`;
+          return;
+        }
+        el.innerHTML = WEEKDAY_ORDER.map((day) => {
+          const current = data.weeklySchedule[day];
+          return `<div class="field">
+      <label>${WEEKDAY_LABELS[day]}</label>
+      <select class="scheduleDaySelect" data-day="${day}">
+        <option value="">Nenhum (descanso)</option>
+        ${data.workouts.map((w) => `<option value="${w.id}" ${current === w.id ? "selected" : ""}>${w.name}</option>`).join("")}
+      </select>
+    </div>`;
+        }).join("");
+      }
+
+      document
+        .getElementById("weeklyScheduleBtn")
+        .addEventListener("click", () => {
+          renderWeeklyScheduleForm();
+          openModal("modalWeeklySchedule");
+        });
+
+      document
+        .getElementById("saveWeeklyScheduleBtn")
+        .addEventListener("click", () => {
+          ensureWeeklySchedule();
+          document.querySelectorAll(".scheduleDaySelect").forEach((sel) => {
+            data.weeklySchedule[sel.dataset.day] = sel.value || null;
+          });
+          saveData();
+          showToast("Plano semanal guardado.");
+          closeModal("modalWeeklySchedule");
+          renderScheduleTodayBanner();
+        });
+
+      // Aviso dentro da app (não é uma notificação do sistema — só aparece
+      // quando abres a app no dia certo) a lembrar do treino de hoje, se
+      // ainda não o tiveres registado.
+      function renderScheduleTodayBanner() {
+        const el = document.getElementById("scheduleTodayBanner");
+        if (!el) return;
+        ensureWeeklySchedule();
+        const todayKey = getWeekdayKey(new Date());
+        const workoutId = data.weeklySchedule[todayKey];
+        if (!workoutId) {
+          el.innerHTML = "";
+          return;
+        }
+        const workout = data.workouts.find((w) => w.id === workoutId);
+        if (!workout) {
+          el.innerHTML = "";
+          return;
+        }
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const alreadyDone = data.loggedWorkouts.some(
+          (lw) => lw.date === todayStr && lw.workoutId === workoutId,
+        );
+        if (alreadyDone) {
+          el.innerHTML = `<div class="card card-accent-cardio" style="margin-bottom:18px;">
+        <div class="card-title">Plano de hoje</div>
+        <p class="small-note" style="margin-top:0;">✅ Já registaste o "${workout.name}" de hoje. Bom trabalho!</p>
+      </div>`;
+          return;
+        }
+        el.innerHTML = `<div class="card card-accent-gold" style="margin-bottom:18px;">
+      <div class="card-title">Plano de hoje</div>
+      <p style="margin:0 0 10px;">Hoje é dia de <strong>${workout.name}</strong>.</p>
+      <button class="btn btn-strength btn-block" id="scheduleTodayBtn">Registar agora</button>
+    </div>`;
+        document
+          .getElementById("scheduleTodayBtn")
+          .addEventListener("click", () => startSession(workout.id));
+      }
+
+      // Ao virar a semana (nova segunda-feira), verifica se a semana anterior
+      // cumpriu o plano por completo, e felicita o utilizador se sim. Só
+      // corre uma vez por semana (guardado em lastWeeklyReviewWeek).
+      function checkWeeklyReview() {
+        ensureWeeklySchedule();
+        const scheduledDays = WEEKDAY_ORDER.filter(
+          (day) => data.weeklySchedule[day],
+        );
+        const currentMonday = getMonday(new Date().toISOString().slice(0, 10));
+        if (data.lastWeeklyReviewWeek === currentMonday) return;
+
+        if (scheduledDays.length > 0) {
+          const prevMonday = new Date(currentMonday + "T00:00:00");
+          prevMonday.setDate(prevMonday.getDate() - 7);
+          const dayOffset = {
+            mon: 0,
+            tue: 1,
+            wed: 2,
+            thu: 3,
+            fri: 4,
+            sat: 5,
+            sun: 6,
+          };
+          const allDone = scheduledDays.every((day) => {
+            const d = new Date(prevMonday);
+            d.setDate(d.getDate() + dayOffset[day]);
+            const dateStr = d.toISOString().slice(0, 10);
+            const workoutId = data.weeklySchedule[day];
+            return data.loggedWorkouts.some(
+              (lw) => lw.date === dateStr && lw.workoutId === workoutId,
+            );
+          });
+          // Só felicita se a semana passada já tinha o plano definido há
+          // pelo menos alguns dias (evita felicitar logo na primeira semana
+          // parcial em que o plano acabou de ser criado a meio da semana).
+          if (allDone && data.lastWeeklyReviewWeek !== null) {
+            document.getElementById("weeklyCongratsBody").innerHTML = `
+          <p style="margin-top:0;">Cumpriste o teu plano semanal por completo — treinaste em todos os ${scheduledDays.length} dia(s) que tinhas definido. 💪</p>
+          <button class="btn btn-strength btn-block" data-close="modalWeeklyCongrats">Fechar</button>
+        `;
+            document
+              .querySelectorAll('#modalWeeklyCongrats [data-close]')
+              .forEach((b) =>
+                b.addEventListener("click", () =>
+                  closeModal("modalWeeklyCongrats"),
+                ),
+              );
+            openModal("modalWeeklyCongrats");
+          }
+        }
+
+        data.lastWeeklyReviewWeek = currentMonday;
+        saveData();
+      }
 
       function moveWorkout(workoutId, delta) {
         const idx = data.workouts.findIndex((w) => w.id === workoutId);
@@ -4343,6 +4521,7 @@
           setActiveTab("perfil");
           checkForSessionDraft();
           loadSocialState();
+          checkWeeklyReview();
 
           try {
             const res = await apiLoad(authToken);

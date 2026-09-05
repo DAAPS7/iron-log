@@ -162,7 +162,11 @@
             <button class="btn btn-ghost" id="exerciseLibraryBtn">
               📚 Biblioteca de Exercícios
             </button>
+            <button class="btn btn-ghost" id="weeklyScheduleBtn">
+              📅 Plano Semanal
+            </button>
           </div>
+          <div id="scheduleTodayBanner"></div>
           <div id="workoutsList"></div>
         </section>
 
@@ -579,6 +583,43 @@
           <button class="btn btn-strength btn-block" id="addMealConfirmBtn">
             + Adicionar ao dia
           </button>
+        </div>
+      </div>
+
+      <!-- ===================== MODAL: WEEKLY SCHEDULE ===================== -->
+      <div class="modal-overlay" id="modalWeeklySchedule">
+        <div class="modal">
+          <div class="modal-head">
+            <h2>Plano Semanal</h2>
+            <button class="modal-close" data-close="modalWeeklySchedule">
+              ✕
+            </button>
+          </div>
+          <p class="small-note" style="margin-top: 0">
+            Define que treino fazes em cada dia (opcional — deixa em "Nenhum"
+            os dias de descanso). Quando abrires a app no dia certo, avisamos-te.
+          </p>
+          <div id="weeklyScheduleForm"></div>
+          <button
+            class="btn btn-strength btn-block"
+            id="saveWeeklyScheduleBtn"
+            style="margin-top: 8px"
+          >
+            Guardar plano
+          </button>
+        </div>
+      </div>
+
+      <!-- ===================== MODAL: WEEKLY CONGRATS ===================== -->
+      <div class="modal-overlay" id="modalWeeklyCongrats">
+        <div class="modal">
+          <div class="modal-head">
+            <h2>🎉 Parabéns!</h2>
+            <button class="modal-close" data-close="modalWeeklyCongrats">
+              ✕
+            </button>
+          </div>
+          <div id="weeklyCongratsBody"></div>
         </div>
       </div>
 
