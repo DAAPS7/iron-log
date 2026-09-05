@@ -735,7 +735,7 @@
 
         el.innerHTML = `
   <div class="grid grid-2" style="margin-bottom:14px;">
-    ${ringCard("Gordura Corporal", bf ?? "—", bf != null ? "%" : "", bfPct, bf != null ? classifyBodyFat(bf, p.gender) : "sem dados", "var(--strength)", "card-clickable", 'data-metric="bodyfat"')}
+    ${ringCard("Gordura Corporal", bf ?? "—", bf != null ? "%" : "", bfPct, bf != null ? classifyBodyFat(bf, p.gender) : "sem dados", bf != null ? bodyFatColor(bf, p.gender) : "var(--muted)", "card-clickable", 'data-metric="bodyfat"')}
     <div class="card card-clickable card-accent-info" data-metric="bmr">
       <div class="card-title">Metabolismo Basal</div>
       <div style="display:flex; align-items:baseline; gap:6px; margin-top:8px;">
@@ -808,14 +808,24 @@
         const sorted = [...data.weightHistory].sort(
           (a, b) => new Date(a.date) - new Date(b.date),
         );
+        // Se houver uma meta de peso definida, usa-a para saber se subir de
+        // peso é bom (a ganhar massa) ou mau (a tentar perder). Sem meta,
+        // assume-se o caso mais comum: perder/manter peso.
+        const weightGoal = data.metricGoals && data.metricGoals.weight;
+        const currentW = getCurrentWeight();
+        let wantsToLose = true;
+        if (weightGoal && weightGoal.target != null && currentW != null) {
+          wantsToLose = weightGoal.target < currentW;
+        }
         const rows = sorted
           .map((p, i) => {
             const prev = i > 0 ? sorted[i - 1].weight : null;
             const diff = prev != null ? Math.round((p.weight - prev) * 10) / 10 : null;
             let diffHtml = "";
             if (diff != null) {
-              const color =
-                diff > 0 ? "var(--danger)" : diff < 0 ? "var(--cardio)" : "var(--muted)";
+              let color = "var(--muted)";
+              if (diff > 0) color = wantsToLose ? "var(--danger)" : "var(--good)";
+              else if (diff < 0) color = wantsToLose ? "var(--good)" : "var(--danger)";
               const sign = diff > 0 ? "+" : "";
               diffHtml = `<div class="small-note" style="color:${color}; margin-top:2px;">${sign}${diff} kg desde o registo anterior</div>`;
             }
@@ -834,14 +844,16 @@
       // Igual ao histórico de peso, mas genérico para o progresso de um
       // exercício (força ou cardio) — sessions já vem ordenado por data
       // ascendente, cada item com {date, value, detail}.
-      function openProgressHistoryModal(title, sessions) {
+      function openProgressHistoryModal(title, sessions, higherIsBetter) {
+        if (higherIsBetter === undefined) higherIsBetter = true;
         const rows = sessions
           .map((s, i) => {
             const prev = i > 0 ? sessions[i - 1].value : null;
             const diff = prev != null ? Math.round((s.value - prev) * 100) / 100 : null;
             let diffHtml = "";
             if (diff != null && diff !== 0) {
-              const color = diff > 0 ? "var(--strength)" : "var(--cardio)";
+              const improved = higherIsBetter ? diff > 0 : diff < 0;
+              const color = improved ? "var(--good)" : "var(--danger)";
               const sign = diff > 0 ? "+" : "";
               diffHtml = `<div class="small-note" style="color:${color}; margin-top:2px;">${sign}${diff} desde o registo anterior</div>`;
             }
@@ -1127,6 +1139,59 @@
 
       // Converte uma cor resolvida (rgb(...) ou #hex) numa rgba() com o alfa
       // pedido — usado para gradientes/sombras nos gráficos.
+      function parseColorToRgb(color) {
+        const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (rgbMatch) {
+          return {
+            r: Number(rgbMatch[1]),
+            g: Number(rgbMatch[2]),
+            b: Number(rgbMatch[3]),
+          };
+        }
+        if (color.startsWith("#")) {
+          const hex = color.slice(1);
+          const full =
+            hex.length === 3
+              ? hex
+                  .split("")
+                  .map((c) => c + c)
+                  .join("")
+              : hex;
+          return {
+            r: parseInt(full.slice(0, 2), 16),
+            g: parseInt(full.slice(2, 4), 16),
+            b: parseInt(full.slice(4, 6), 16),
+          };
+        }
+        return { r: 128, g: 128, b: 128 };
+      }
+
+      function interpolateColor(colorA, colorB, t) {
+        t = Math.max(0, Math.min(1, t));
+        const a = parseColorToRgb(colorA);
+        const b = parseColorToRgb(colorB);
+        const r = Math.round(a.r + (b.r - a.r) * t);
+        const g = Math.round(a.g + (b.g - a.g) * t);
+        const bl = Math.round(a.b + (b.b - a.b) * t);
+        return `rgb(${r}, ${g}, ${bl})`;
+      }
+
+      // Cor da gordura corporal numa escala contínua: verde (baixa) a
+      // vermelho (alta). Os limites aproximam-se dos patamares "Definido"
+      // e "Elevado" já usados em classifyBodyFat, mas em vez de saltar entre
+      // categorias, a cor vai variando de forma gradual entre elas.
+      function bodyFatColor(bf, gender) {
+        if (bf == null) return cssVar("--muted");
+        const low = gender ? 7 : 13;
+        const high = gender ? 28 : 35;
+        const t = (bf - low) / (high - low);
+        return interpolateColor(
+          cssVar("--good") || "#2e9e4f",
+          cssVar("--danger") || "#c23b3b",
+          t,
+        );
+      }
+
       function colorWithAlpha(color, alpha) {
         let r, g, b;
         const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -3823,6 +3888,7 @@
         let rowsHtml = "";
         let progressName = null;
         let progressSessions = null;
+        let progressHigherIsBetter = true;
 
         if (key === "__weight__") {
           const sorted = [...data.weightHistory].sort(
@@ -3941,6 +4007,7 @@
           if (sessions.length > 2) {
             progressName = name;
             progressSessions = sessions;
+            progressHigherIsBetter = !cardioPaceMode;
             rowsHtml = `<button class="btn btn-ghost btn-block" id="viewAllExerciseBtn">Ver todos os registos (${sessions.length})</button>`;
           } else {
             rowsHtml = sessions
@@ -3985,7 +4052,11 @@
         const viewAllExerciseBtn = document.getElementById("viewAllExerciseBtn");
         if (viewAllExerciseBtn && progressSessions) {
           viewAllExerciseBtn.addEventListener("click", () =>
-            openProgressHistoryModal(progressName, progressSessions),
+            openProgressHistoryModal(
+              progressName,
+              progressSessions,
+              progressHigherIsBetter,
+            ),
           );
         }
       }
