@@ -3643,6 +3643,8 @@
 
         let points = [];
         let rowsHtml = "";
+        let progressName = null;
+        let progressSessions = null;
 
         if (key === "__weight__") {
           const sorted = [...data.weightHistory].sort(
@@ -3759,6 +3761,8 @@
             });
           points = sessions.map((s) => ({ date: s.date, value: s.value }));
           if (sessions.length > 2) {
+            progressName = name;
+            progressSessions = sessions;
             rowsHtml = `<button class="btn btn-ghost btn-block" id="viewAllExerciseBtn">Ver todos os registos (${sessions.length})</button>`;
           } else {
             rowsHtml = sessions
@@ -3794,20 +3798,18 @@
               prContainer.innerHTML = "";
             }
           }
-          const viewAllExerciseBtn = document.getElementById(
-            "viewAllExerciseBtn",
-          );
-          if (viewAllExerciseBtn) {
-            viewAllExerciseBtn.addEventListener("click", () =>
-              openProgressHistoryModal(name, sessions),
-            );
-          }
         }
 
         drawLineChart(canvas, points);
         tableEl.innerHTML = points.length
           ? rowsHtml
           : `<p class="small-note">Ainda sem registos suficientes.</p>`;
+        const viewAllExerciseBtn = document.getElementById("viewAllExerciseBtn");
+        if (viewAllExerciseBtn && progressSessions) {
+          viewAllExerciseBtn.addEventListener("click", () =>
+            openProgressHistoryModal(progressName, progressSessions),
+          );
+        }
       }
 
       function renderExercisePrSection(key, type, name) {
@@ -4221,6 +4223,10 @@
 
       /* ===================== HISTORICO TAB ===================== */
 
+      // Nomes de treino cujo grupo está aberto no Histórico (fechados por
+      // omissão, para evitar um scroll enorme com tudo expandido).
+      const historyOpenGroups = new Set();
+
       function renderHistorico() {
         const el = document.getElementById("historicoContent");
         if (!data.loggedWorkouts.length) {
@@ -4250,6 +4256,7 @@
 
         const html = groups
           .map((group) => {
+            const isOpen = historyOpenGroups.has(group.name);
             const itemsHtml = group.items
               .map((lw) => {
                 const exSummary = lw.exercises
@@ -4268,14 +4275,27 @@
               })
               .join("");
             return `<div class="history-day-group">
-      <div class="history-day-header">${group.name} <span style="color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0;">(${group.items.length})</span></div>
-      ${itemsHtml}
+      <button class="history-day-header" data-toggle-group="${group.name}" type="button">
+        <span>${group.name} <span style="color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0;">(${group.items.length})</span></span>
+        <span class="history-chevron" style="transform:rotate(${isOpen ? "180deg" : "0deg"});">▾</span>
+      </button>
+      <div class="history-day-items" style="display:${isOpen ? "block" : "none"};">
+        ${itemsHtml}
+      </div>
     </div>`;
           })
           .join("");
 
         el.innerHTML = html;
 
+        el.querySelectorAll("[data-toggle-group]").forEach((btn) =>
+          btn.addEventListener("click", () => {
+            const name = btn.dataset.toggleGroup;
+            if (historyOpenGroups.has(name)) historyOpenGroups.delete(name);
+            else historyOpenGroups.add(name);
+            renderHistorico();
+          }),
+        );
         el.querySelectorAll("[data-editlog]").forEach((b) =>
           b.addEventListener("click", () => startEditLog(b.dataset.editlog)),
         );

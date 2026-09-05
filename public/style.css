@@ -856,15 +856,32 @@ fieldset {
   margin-bottom: 22px;
 }
 .history-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   font-family: var(--font-display), sans-serif;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
-  padding-bottom: 6px;
-  margin-bottom: 10px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 4px 0 10px;
+  margin-bottom: 6px;
   border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+}
+.history-chevron {
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.history-day-items {
+  padding-top: 4px;
 }
 .log-item {
   background: var(--surface);
