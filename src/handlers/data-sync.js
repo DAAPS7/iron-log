@@ -16,16 +16,21 @@ async function getAuthedRecord(request, env) {
   return { uKey, record };
 }
 
-// Compara os PRs antigos com os novos e devolve os que subiram de peso —
-// usado para avisar os amigos automaticamente quando alguém bate um recorde.
+// Compara os PRs antigos com os novos e devolve os que melhoraram (mais peso,
+// ou o mesmo peso com mais reps) — usado para avisar os amigos automaticamente.
 function findNewPRs(oldPRs, newPRs) {
   const improved = [];
   const oldMap = oldPRs || {};
   const newMap = newPRs || {};
   for (const key of Object.keys(newMap)) {
-    const oldWeight = oldMap[key] ? oldMap[key].weight : 0;
+    const oldEntry = oldMap[key];
     const newEntry = newMap[key];
-    if (newEntry && newEntry.weight > oldWeight) {
+    if (!newEntry) continue;
+    const isBetter =
+      !oldEntry ||
+      newEntry.weight > oldEntry.weight ||
+      (newEntry.weight === oldEntry.weight && (newEntry.reps || 0) > (oldEntry.reps || 0));
+    if (isBetter) {
       improved.push({ key, ...newEntry });
     }
   }
@@ -44,7 +49,7 @@ export async function handleDataSyncPost(request, env) {
 
   try {
     const body = await request.json();
-    const oldPRs = record.data ? record.data.exercisePRs : null;
+    const oldPRs = record.data ? record.data.prNotifyCache : null;
 
     if (body.data !== undefined) record.data = body.data;
     if (body.settings !== undefined) record.settings = body.settings;
@@ -53,7 +58,7 @@ export async function handleDataSyncPost(request, env) {
     await putUserRecord(env, uKey, record);
 
     // Notifica os amigos se algum PR subiu neste guardar.
-    const newPRs = findNewPRs(oldPRs, record.data ? record.data.exercisePRs : null);
+    const newPRs = findNewPRs(oldPRs, record.data ? record.data.prNotifyCache : null);
     const friends = record.friends || [];
     if (newPRs.length && friends.length) {
       for (const pr of newPRs) {

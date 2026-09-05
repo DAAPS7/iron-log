@@ -145,13 +145,24 @@
           <div class="page-sub">
             Cria os teus treinos e regista cada sessão.
           </div>
-          <button
-            class="btn btn-strength"
-            id="newWorkoutBtn"
-            style="margin-bottom: 18px"
+          <div
+            style="
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              margin-bottom: 18px;
+            "
           >
-            + Criar treino
-          </button>
+            <button class="btn btn-strength" id="newWorkoutBtn">
+              + Criar treino
+            </button>
+            <button class="btn btn-ghost" id="freeSessionBtn">
+              + Treino Livre
+            </button>
+            <button class="btn btn-ghost" id="exerciseLibraryBtn">
+              📚 Biblioteca de Exercícios
+            </button>
+          </div>
           <div id="workoutsList"></div>
         </section>
 
@@ -334,6 +345,20 @@
           <div class="modal-head">
             <h2 id="sessionTitle">Registar Treino</h2>
             <button class="modal-close" data-close="modalSession">✕</button>
+          </div>
+          <div class="field" id="sessionNameField" style="display: none">
+            <label>Nome do treino</label>
+            <input
+              type="text"
+              id="sessionNameInput"
+              placeholder="Ex: Treino de hoje"
+              oninput="
+                if (activeSession) {
+                  activeSession.workoutName = this.value;
+                  saveSessionDraft();
+                }
+              "
+            />
           </div>
           <div class="field" id="sessionDateField" style="display: none">
             <label>Data</label>
@@ -554,6 +579,36 @@
           <button class="btn btn-strength btn-block" id="addMealConfirmBtn">
             + Adicionar ao dia
           </button>
+        </div>
+      </div>
+
+      <!-- ===================== MODAL: EXERCISE LIBRARY ===================== -->
+      <div class="modal-overlay" id="modalExerciseLibrary">
+        <div class="modal">
+          <div class="modal-head">
+            <h2>Biblioteca de Exercícios</h2>
+            <button class="modal-close" data-close="modalExerciseLibrary">
+              ✕
+            </button>
+          </div>
+          <p class="small-note" style="margin-top: 0">
+            Os exercícios de força disponíveis na app, por ordem alfabética.
+            Mais serão adicionados no futuro.
+          </p>
+          <div id="exerciseLibraryList"></div>
+        </div>
+      </div>
+
+      <!-- ===================== MODAL: WEIGHT HISTORY ===================== -->
+      <div class="modal-overlay" id="modalWeightHistory">
+        <div class="modal">
+          <div class="modal-head">
+            <h2>Todos os Registos de Peso</h2>
+            <button class="modal-close" data-close="modalWeightHistory">
+              ✕
+            </button>
+          </div>
+          <div id="weightHistoryList"></div>
         </div>
       </div>
 

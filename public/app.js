@@ -52,6 +52,7 @@
           calorieGoal: null,
           macroGoals: { protein: null, carbs: null, fat: null },
           exercisePRs: {},
+          prNotifyCache: {},
           mealPlans: [],
           metricGoals: {
             bodyFat: { target: null, targetDate: null },
@@ -297,6 +298,7 @@
 
       function saveData() {
         if (!currentUsername) return;
+        updatePRNotifyCache();
         saveCache();
         const statusNote = document.getElementById("syncStatusNote");
         apiSave(authToken, data, currentSettings)
@@ -602,6 +604,60 @@
         if (tab === "historico") renderHistorico();
         window.scrollTo({ top: 0 });
       }
+
+      // Swipe horizontal entre tabs em mobile (segue a mesma ordem da barra
+      // de navegação de baixo). Não interfere com scroll vertical nem com
+      // modais abertos.
+      (function setupSwipeNav() {
+        const MOBILE_TAB_ORDER = [
+          "perfil",
+          "treinos",
+          "calorias",
+          "progresso",
+          "historico",
+        ];
+        const mainEl = document.querySelector("main");
+        if (!mainEl) return;
+        let touchStartX = null;
+        let touchStartY = null;
+
+        mainEl.addEventListener(
+          "touchstart",
+          (e) => {
+            if (e.touches.length !== 1) return;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+          },
+          { passive: true },
+        );
+
+        mainEl.addEventListener(
+          "touchend",
+          (e) => {
+            if (touchStartX === null) return;
+            const touch = e.changedTouches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+            touchStartX = null;
+            touchStartY = null;
+
+            if (window.innerWidth >= 760) return; // só em mobile
+            if (Math.abs(deltaX) < 60 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+            if (document.querySelector(".modal-overlay.open")) return;
+
+            const activePanel = document.querySelector(".tab-panel.active");
+            if (!activePanel) return;
+            const currentTab = activePanel.id.replace("tab-", "");
+            const idx = MOBILE_TAB_ORDER.indexOf(currentTab);
+            if (idx === -1) return;
+            const nextIdx = idx + (deltaX < 0 ? 1 : -1);
+            if (nextIdx < 0 || nextIdx >= MOBILE_TAB_ORDER.length) return;
+            setActiveTab(MOBILE_TAB_ORDER[nextIdx]);
+          },
+          { passive: true },
+        );
+      })();
+
       document
         .querySelectorAll("#desktopNav button, #bottomNav button")
         .forEach((b) => {
@@ -734,6 +790,33 @@
         if (bmi >= 18.5 && bmi < 25) return "var(--cardio)";
         if (bmi < 18.5) return "var(--gold)";
         return "var(--strength)";
+      }
+
+      function openWeightHistoryModal() {
+        const sorted = [...data.weightHistory].sort(
+          (a, b) => new Date(a.date) - new Date(b.date),
+        );
+        const rows = sorted
+          .map((p, i) => {
+            const prev = i > 0 ? sorted[i - 1].weight : null;
+            const diff = prev != null ? Math.round((p.weight - prev) * 10) / 10 : null;
+            let diffHtml = "";
+            if (diff != null) {
+              const color =
+                diff > 0 ? "var(--danger)" : diff < 0 ? "var(--cardio)" : "var(--muted)";
+              const sign = diff > 0 ? "+" : "";
+              diffHtml = `<div class="small-note" style="color:${color}; margin-top:2px;">${sign}${diff} kg desde o registo anterior</div>`;
+            }
+            return `<div class="log-item">
+        <div class="log-item-head"><span class="name">${formatDate(p.date)}</span><span class="date mono">${p.weight} kg</span></div>
+        ${diffHtml}
+      </div>`;
+          })
+          .reverse()
+          .join("");
+        document.getElementById("weightHistoryList").innerHTML =
+          rows || `<p class="small-note">Ainda sem registos.</p>`;
+        openModal("modalWeightHistory");
       }
 
       function openMetricInsight(metric, ctx) {
@@ -1002,6 +1085,31 @@
         return getComputedStyle(document.body).getPropertyValue(name).trim();
       }
 
+      // Converte uma cor resolvida (rgb(...) ou #hex) numa rgba() com o alfa
+      // pedido — usado para gradientes/sombras nos gráficos.
+      function colorWithAlpha(color, alpha) {
+        let r, g, b;
+        const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (rgbMatch) {
+          [r, g, b] = [rgbMatch[1], rgbMatch[2], rgbMatch[3]].map(Number);
+        } else if (color.startsWith("#")) {
+          const hex = color.slice(1);
+          const full =
+            hex.length === 3
+              ? hex
+                  .split("")
+                  .map((c) => c + c)
+                  .join("")
+              : hex;
+          r = parseInt(full.slice(0, 2), 16);
+          g = parseInt(full.slice(2, 4), 16);
+          b = parseInt(full.slice(4, 6), 16);
+        } else {
+          return color;
+        }
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
       function getMonday(dateStr) {
         const d = new Date(dateStr + "T00:00:00");
         const day = d.getDay();
@@ -1094,17 +1202,44 @@
         );
         ctx.textAlign = "left";
 
-        // linha diária (fina, semi-transparente)
-        ctx.beginPath();
-        dailyPoints.forEach((p, i) => {
-          const x = xFor(p.date),
-            y = yFor(p.value);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+        // grelha horizontal subtil (referência visual)
+        ctx.strokeStyle = mutedColor;
+        ctx.globalAlpha = 0.12;
+        ctx.lineWidth = 1;
+        [0.25, 0.5, 0.75].forEach((f) => {
+          const y = padTop + plotH * f;
+          ctx.beginPath();
+          ctx.moveTo(padLeft, y);
+          ctx.lineTo(padLeft + plotW, y);
+          ctx.stroke();
         });
+        ctx.globalAlpha = 1;
+
+        // desenha uma linha suavizada (curvas em vez de segmentos retos)
+        function smoothPath(points) {
+          ctx.beginPath();
+          points.forEach((p, i) => {
+            const x = xFor(p.date),
+              y = yFor(p.value);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              const prev = points[i - 1];
+              const px = xFor(prev.date),
+                py = yFor(prev.value);
+              const midX = (px + x) / 2,
+                midY = (py + y) / 2;
+              ctx.quadraticCurveTo(px, py, midX, midY);
+              if (i === points.length - 1) ctx.lineTo(x, y);
+            }
+          });
+        }
+
+        // linha diária (fina, semi-transparente)
+        smoothPath(dailyPoints);
         ctx.strokeStyle = strengthColor;
         ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.4;
+        ctx.globalAlpha = 0.35;
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.stroke();
@@ -1115,29 +1250,46 @@
           ctx.beginPath();
           ctx.arc(x, y, 2, 0, Math.PI * 2);
           ctx.fillStyle = strengthColor;
-          ctx.globalAlpha = 0.55;
+          ctx.globalAlpha = 0.5;
           ctx.fill();
           ctx.globalAlpha = 1;
         });
 
-        // linha da média semanal (grossa, cor de destaque)
+        // preenchimento em gradiente por baixo da média semanal
         if (weeklyPoints.length >= 2) {
-          ctx.beginPath();
-          weeklyPoints.forEach((p, i) => {
-            const x = xFor(p.date),
-              y = yFor(p.value);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          });
+          const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+          gradient.addColorStop(0, colorWithAlpha(cardioColor, 0.22));
+          gradient.addColorStop(1, colorWithAlpha(cardioColor, 0));
+          ctx.save();
+          smoothPath(weeklyPoints);
+          const lastPt = weeklyPoints[weeklyPoints.length - 1];
+          ctx.lineTo(xFor(lastPt.date), padTop + plotH);
+          ctx.lineTo(xFor(weeklyPoints[0].date), padTop + plotH);
+          ctx.closePath();
+          ctx.fillStyle = gradient;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // linha da média semanal (grossa, suavizada, com leve brilho)
+        if (weeklyPoints.length >= 2) {
+          smoothPath(weeklyPoints);
+          ctx.shadowColor = colorWithAlpha(cardioColor, 0.35);
+          ctx.shadowBlur = 6;
           ctx.strokeStyle = cardioColor;
           ctx.lineWidth = 3;
           ctx.lineJoin = "round";
           ctx.lineCap = "round";
           ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         weeklyPoints.forEach((p) => {
           const x = xFor(p.date),
             y = yFor(p.value);
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = cssVar("--surface") || "#fff";
+          ctx.fill();
           ctx.beginPath();
           ctx.arc(x, y, 3.5, 0, Math.PI * 2);
           ctx.fillStyle = cardioColor;
@@ -1350,13 +1502,13 @@
                 if (ex.type === "strength") {
                   return `<div class="ex-row">
           <span class="ex-tag tag-strength">Força</span>
-          <span class="ex-name">${ex.name}${noteLine}</span>
+          <div class="ex-name">${ex.name}${noteLine}</div>
           <span class="ex-detail">${warmupPrefix}${ex.sets}x(${ex.minReps}-${ex.maxReps})</span>
         </div>`;
                 } else {
                   return `<div class="ex-row">
           <span class="ex-tag tag-cardio">Cardio</span>
-          <span class="ex-name">${ex.name}${noteLine}</span>
+          <div class="ex-name">${ex.name}${noteLine}</div>
           <span class="ex-detail">${warmupPrefix}${ex.sets}x${formatMinSec(ex.duration)}${ex.distance ? ` · ${ex.distance}${ex.distanceUnit || "km"}` : ""}</span>
         </div>`;
                 }
@@ -1422,6 +1574,43 @@
         renderBuilderList();
         openModal("modalWorkout");
       });
+
+      document
+        .getElementById("exerciseLibraryBtn")
+        .addEventListener("click", () => {
+          const el = document.getElementById("exerciseLibraryList");
+          const muscleColors = {};
+          const palette = [
+            "var(--strength)",
+            "var(--cardio)",
+            "var(--gold)",
+            "var(--info)",
+          ];
+          let colorIdx = 0;
+          const sorted = [...STRENGTH_EXERCISES].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          );
+          el.innerHTML = sorted
+            .map((ex) => {
+              if (!muscleColors[ex.muscle]) {
+                muscleColors[ex.muscle] = palette[colorIdx % palette.length];
+                colorIdx++;
+              }
+              const color = muscleColors[ex.muscle];
+              return `<div class="log-item">
+            <div class="log-item-head">
+              <span class="name">${ex.name}</span>
+              <span class="ex-tag" style="background:color-mix(in srgb, ${color} 16%, var(--surface)); color:${color};">${ex.muscle}</span>
+            </div>
+          </div>`;
+            })
+            .join("");
+          openModal("modalExerciseLibrary");
+        });
+
+      document
+        .getElementById("freeSessionBtn")
+        .addEventListener("click", () => startFreeSession());
 
       function moveWorkout(workoutId, delta) {
         const idx = data.workouts.findIndex((w) => w.id === workoutId);
@@ -1744,8 +1933,19 @@
       }
       function resumeSessionDraft(draft) {
         activeSession = draft;
+        const isFree = !draft.editingLogId && !draft.workoutId;
         document.getElementById("sessionTitle").textContent =
-          draft.editingLogId ? `Editar: ${draft.workoutName}` : draft.workoutName;
+          draft.editingLogId
+            ? `Editar: ${draft.workoutName}`
+            : isFree
+              ? "Treino Livre"
+              : draft.workoutName;
+        document.getElementById("sessionNameField").style.display = isFree
+          ? "block"
+          : "none";
+        if (isFree)
+          document.getElementById("sessionNameInput").value =
+            draft.workoutName || "";
         document.getElementById("sessionDateField").style.display =
           draft.editingLogId ? "block" : "none";
         if (draft.editingLogId)
@@ -1782,6 +1982,26 @@
           })),
         };
         document.getElementById("sessionTitle").textContent = workout.name;
+        document.getElementById("sessionNameField").style.display = "none";
+        document.getElementById("sessionDateField").style.display = "none";
+        document.getElementById("deleteLogBtn").style.display = "none";
+        document.getElementById("finishSessionBtn").textContent =
+          "Concluir treino";
+        resetExtraExerciseForm();
+        renderSession();
+        openModal("modalSession");
+      }
+
+      function startFreeSession() {
+        activeSession = {
+          editingLogId: null,
+          workoutId: null,
+          workoutName: "",
+          exercises: [],
+        };
+        document.getElementById("sessionTitle").textContent = "Treino Livre";
+        document.getElementById("sessionNameField").style.display = "block";
+        document.getElementById("sessionNameInput").value = "";
         document.getElementById("sessionDateField").style.display = "none";
         document.getElementById("deleteLogBtn").style.display = "none";
         document.getElementById("finishSessionBtn").textContent =
@@ -1861,6 +2081,7 @@
         };
         document.getElementById("sessionTitle").textContent =
           `Editar: ${entry.workoutName}`;
+        document.getElementById("sessionNameField").style.display = "none";
         document.getElementById("sessionDateField").style.display = "block";
         document.getElementById("sessionDateInput").value = entry.date;
         document.getElementById("deleteLogBtn").style.display = "block";
@@ -1876,12 +2097,20 @@
       // Analisa TODO o histórico de sessões e garante que data.exercisePRs[key]
       // reflete sempre o melhor set de sempre. Nunca desce um PR já guardado —
       // só o substitui se um set registado na app o superar.
-      function reconcileExercisePR(type, name) {
-        if (type !== "strength") return null;
-        const key = `${type}::${name}`;
-        let bestWeight = 0,
-          bestReps = null,
-          bestUnit = "kg";
+      // Um set "a" é melhor que "b" se tiver mais peso, ou o mesmo peso com mais reps.
+      function isBetterSet(a, b) {
+        if (!a) return false;
+        if (!b) return true;
+        if (a.weight > b.weight) return true;
+        if (a.weight === b.weight && (a.reps || 0) > (b.reps || 0)) return true;
+        return false;
+      }
+
+      // Melhor set alguma vez registado nas sessões atuais (ignora aquecimentos).
+      // Recalculado sempre a partir do histórico presente — se apagares o
+      // registo que era o PR, este valor desce automaticamente sozinho.
+      function computeBestFromSessions(type, name) {
+        let best = null;
         data.loggedWorkouts.forEach((lw) => {
           lw.exercises.forEach((ex) => {
             if (ex.type === type && ex.name === name) {
@@ -1891,35 +2120,59 @@
                   /^(\d+)\s*[x×]\s*([\d.]+)\s*([a-zA-Zà-úÀ-Ú]*)/,
                 );
                 if (m) {
-                  const reps = parseInt(m[1]),
-                    w = parseFloat(m[2]);
-                  if (w > bestWeight) {
-                    bestWeight = w;
-                    bestReps = reps;
-                    bestUnit = m[3] || "kg";
-                  }
+                  const candidate = {
+                    reps: parseInt(m[1]),
+                    weight: parseFloat(m[2]),
+                    unit: m[3] || "kg",
+                  };
+                  if (isBetterSet(candidate, best)) best = candidate;
                 }
               });
             }
           });
         });
-        const existing = data.exercisePRs[key];
-        if (bestWeight > 0 && (!existing || bestWeight > existing.weight)) {
-          data.exercisePRs[key] = {
-            weight: bestWeight,
-            reps: bestReps,
-            unit: bestUnit,
-          };
-          saveData();
-        }
-        return data.exercisePRs[key] || null;
+        return best;
+      }
+
+      // PR efetivo = o melhor entre o que definiste manualmente (ex: recorde
+      // anterior à app) e o melhor set já registado nas sessões atuais.
+      // Não é guardado à parte — é sempre recalculado, por isso reflete
+      // corretamente qualquer edição/remoção de registos.
+      function getEffectivePR(type, name) {
+        if (type !== "strength") return null;
+        const key = `${type}::${name}`;
+        const manual = data.exercisePRs[key] || null;
+        const sessionsBest = computeBestFromSessions(type, name);
+        return isBetterSet(sessionsBest, manual) ? sessionsBest : manual;
+      }
+
+      // Cache separado do PR exibido — só serve para o servidor detetar
+      // subidas de PR e notificar os amigos. Ao contrário do PR efetivo
+      // (sempre recalculado ao vivo), este só sobe de propósito, para o
+      // histórico de notificações fazer sentido mesmo que apagues depois
+      // o registo que gerou o PR.
+      function updatePRNotifyCache() {
+        if (!data.prNotifyCache) data.prNotifyCache = {};
+        const seen = new Set();
+        data.loggedWorkouts.forEach((lw) => {
+          lw.exercises.forEach((ex) => {
+            if (ex.type !== "strength") return;
+            const key = `strength::${ex.name}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            const best = computeBestFromSessions("strength", ex.name);
+            if (best && isBetterSet(best, data.prNotifyCache[key])) {
+              data.prNotifyCache[key] = best;
+            }
+          });
+        });
       }
 
       function showExerciseHistory(type, name) {
         document.getElementById("exerciseHistoryTitle").textContent = name;
         const el = document.getElementById("exerciseHistoryList");
 
-        const pr = reconcileExercisePR(type, name);
+        const pr = getEffectivePR(type, name);
 
         const rows = [];
         [...data.loggedWorkouts]
@@ -2338,7 +2591,7 @@
             data.loggedWorkouts.push({
               id: uid(),
               workoutId: activeSession.workoutId,
-              workoutName: activeSession.workoutName,
+              workoutName: activeSession.workoutName || "Treino Livre",
               date: new Date().toISOString().slice(0, 10),
               exercises: cleanExercises,
             });
@@ -3367,27 +3620,19 @@
             (a, b) => new Date(a.date) - new Date(b.date),
           );
           points = sorted.map((p) => ({ date: p.date, value: p.weight }));
-          rowsHtml = sorted
-            .slice()
-            .reverse()
-            .map(
-              (p) => `
-      <div class="log-item">
-        <div class="log-item-head"><span class="name">Peso Corporal</span><span class="date">${formatDate(p.date)}</span></div>
-        <div class="log-item-ex">${p.weight} kg</div>
-      </div>`,
-            )
-            .join("");
           const prContainerWeight =
             document.getElementById("exercisePrSection");
           if (prContainerWeight) prContainerWeight.innerHTML = "";
           drawWeightWeeklyChart(canvas, points);
           tableEl.innerHTML = points.length
-            ? rowsHtml
+            ? `<button class="btn btn-ghost btn-block" id="viewAllWeightBtn">Ver todos os registos (${points.length})</button>`
             : `<p class="small-note">Ainda sem registos suficientes.</p>`;
           const axisNoteWeight = document.getElementById("progressAxisNote");
           if (axisNoteWeight)
             axisNoteWeight.textContent = "Eixo vertical: peso corporal (kg).";
+          const viewAllBtn = document.getElementById("viewAllWeightBtn");
+          if (viewAllBtn)
+            viewAllBtn.addEventListener("click", openWeightHistoryModal);
           return;
         } else {
           const [type, name] = key.split("::");
@@ -3511,8 +3756,7 @@
           const prContainer = document.getElementById("exercisePrSection");
           if (prContainer) {
             if (type === "strength") {
-              reconcileExercisePR(type, name);
-              renderExercisePrSection(key);
+              renderExercisePrSection(key, type, name);
             } else {
               prContainer.innerHTML = "";
             }
@@ -3525,33 +3769,34 @@
           : `<p class="small-note">Ainda sem registos suficientes.</p>`;
       }
 
-      function renderExercisePrSection(key) {
+      function renderExercisePrSection(key, type, name) {
         const container = document.getElementById("exercisePrSection");
         if (!container) return;
-        const existing = data.exercisePRs[key];
+        const manual = data.exercisePRs[key] || null;
+        const effective = getEffectivePR(type, name);
 
         container.innerHTML = `
     <div class="card" style="margin-top:14px;">
       <div class="card-title">PR (Recorde Pessoal)</div>
       ${
-        existing
+        effective
           ? `<div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
-             <span class="display" style="font-size:28px; color:var(--gold);">${existing.weight} ${existing.unit}</span>
-             ${existing.reps ? `<span style="color:var(--muted); font-size:13px;">@ ${existing.reps} reps</span>` : ""}
+             <span class="display" style="font-size:28px; color:var(--gold);">${effective.weight} ${effective.unit}</span>
+             ${effective.reps ? `<span style="color:var(--muted); font-size:13px;">@ ${effective.reps} reps</span>` : ""}
            </div>`
           : `<div class="small-note" style="margin-bottom:10px;">Ainda sem PR registado.</div>`
       }
-      <p class="small-note" style="margin-top:0; margin-bottom:10px;">Podes definir/corrigir aqui manualmente (ex: um recorde anterior à app). Depois disso, atualiza-se sozinho sempre que uma série registada na app o superar.</p>
+      <p class="small-note" style="margin-top:0; margin-bottom:10px;">Este valor é sempre o melhor set de sempre — atualiza-se sozinho quando bates um recorde numa sessão, e desce automaticamente se apagares o registo que o gerou. Podes também corrigir manualmente abaixo (ex: um recorde anterior à app).</p>
       <div class="field-row3">
-        <div><label>Reps (opcional)</label><input type="number" min="1" id="prRepsInput" placeholder="Ex: 5" value="${existing && existing.reps ? existing.reps : ""}"></div>
-        <div><label>Peso</label><input type="number" min="0" step="0.5" id="prWeightInput" placeholder="Peso" value="${existing ? existing.weight : ""}"></div>
+        <div><label>Reps (opcional)</label><input type="number" min="1" id="prRepsInput" placeholder="Ex: 5" value="${manual && manual.reps ? manual.reps : ""}"></div>
+        <div><label>Peso</label><input type="number" min="0" step="0.5" id="prWeightInput" placeholder="Peso" value="${manual ? manual.weight : ""}"></div>
         <div><label>Unidade</label>
           <select id="prUnitInput">
-            ${WEIGHT_UNITS.map((u) => `<option value="${u}" ${existing && existing.unit === u ? "selected" : ""}>${u}</option>`).join("")}
+            ${WEIGHT_UNITS.map((u) => `<option value="${u}" ${manual && manual.unit === u ? "selected" : ""}>${u}</option>`).join("")}
           </select>
         </div>
       </div>
-      <button class="btn btn-ghost btn-block" id="prSaveBtn" style="margin-top:8px;">Guardar PR</button>
+      <button class="btn btn-ghost btn-block" id="prSaveBtn" style="margin-top:8px;">Guardar PR manual</button>
     </div>
   `;
 
@@ -3947,15 +4192,28 @@
         const sorted = [...data.loggedWorkouts].sort(
           (a, b) => new Date(b.date) - new Date(a.date),
         );
-        const logsHtml = sorted
-          .map((lw) => {
-            const exSummary = lw.exercises
-              .map((ex) => `${ex.name}: ${ex.sets.join(", ")}`)
-              .join(" · ");
-            return `<div class="log-item">
+
+        // Agrupa por data, para ficar claro onde acaba um dia e começa outro
+        const groups = [];
+        sorted.forEach((lw) => {
+          const lastGroup = groups[groups.length - 1];
+          if (lastGroup && lastGroup.date === lw.date) {
+            lastGroup.items.push(lw);
+          } else {
+            groups.push({ date: lw.date, items: [lw] });
+          }
+        });
+
+        const html = groups
+          .map((group) => {
+            const itemsHtml = group.items
+              .map((lw) => {
+                const exSummary = lw.exercises
+                  .map((ex) => `${ex.name}: ${ex.sets.join(", ")}`)
+                  .join(" · ");
+                return `<div class="log-item">
       <div class="log-item-head">
         <span class="name">${lw.workoutName}</span>
-        <span class="date">${formatDate(lw.date)}</span>
       </div>
       <div class="log-item-ex">${exSummary}</div>
       <div style="display:flex; gap:8px; margin-top:10px;">
@@ -3963,10 +4221,16 @@
         <button class="btn btn-danger-ghost btn-sm" data-dellog="${lw.id}">Apagar</button>
       </div>
     </div>`;
+              })
+              .join("");
+            return `<div class="history-day-group">
+      <div class="history-day-header">${formatDate(group.date)}</div>
+      ${itemsHtml}
+    </div>`;
           })
           .join("");
 
-        el.innerHTML = logsHtml;
+        el.innerHTML = html;
 
         el.querySelectorAll("[data-editlog]").forEach((b) =>
           b.addEventListener("click", () => startEditLog(b.dataset.editlog)),

@@ -106,6 +106,7 @@ function defaultData() {
     calorieGoal: null,
     macroGoals: { protein: null, carbs: null, fat: null },
     exercisePRs: {},
+    prNotifyCache: {},
     mealPlans: [],
   };
 }
