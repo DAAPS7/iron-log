@@ -41,6 +41,7 @@
         { name: "Mid Pec Cable Fly", muscle: "Chest" },
         { name: "Unilateral Tricep Pushdown", muscle: "Triceps" },
       ];
+      STRENGTH_EXERCISES.sort((a, b) => a.name.localeCompare(b.name));
 
       function defaultData() {
         return {
@@ -817,6 +818,34 @@
         document.getElementById("weightHistoryList").innerHTML =
           rows || `<p class="small-note">Ainda sem registos.</p>`;
         openModal("modalWeightHistory");
+      }
+
+      // Igual ao histórico de peso, mas genérico para o progresso de um
+      // exercício (força ou cardio) — sessions já vem ordenado por data
+      // ascendente, cada item com {date, value, detail}.
+      function openProgressHistoryModal(title, sessions) {
+        const rows = sessions
+          .map((s, i) => {
+            const prev = i > 0 ? sessions[i - 1].value : null;
+            const diff = prev != null ? Math.round((s.value - prev) * 100) / 100 : null;
+            let diffHtml = "";
+            if (diff != null && diff !== 0) {
+              const color = diff > 0 ? "var(--strength)" : "var(--cardio)";
+              const sign = diff > 0 ? "+" : "";
+              diffHtml = `<div class="small-note" style="color:${color}; margin-top:2px;">${sign}${diff} desde o registo anterior</div>`;
+            }
+            return `<div class="log-item">
+        <div class="log-item-head"><span class="name">${formatDate(s.date)}</span></div>
+        <div class="log-item-ex">${s.detail}</div>
+        ${diffHtml}
+      </div>`;
+          })
+          .reverse()
+          .join("");
+        document.getElementById("progressHistoryTitle").textContent = title;
+        document.getElementById("progressHistoryList").innerHTML =
+          rows || `<p class="small-note">Ainda sem registos.</p>`;
+        openModal("modalProgressHistory");
       }
 
       function openMetricInsight(metric, ctx) {
@@ -3729,17 +3758,21 @@
               });
             });
           points = sessions.map((s) => ({ date: s.date, value: s.value }));
-          rowsHtml = sessions
-            .slice()
-            .reverse()
-            .map(
-              (s) => `
+          if (sessions.length > 2) {
+            rowsHtml = `<button class="btn btn-ghost btn-block" id="viewAllExerciseBtn">Ver todos os registos (${sessions.length})</button>`;
+          } else {
+            rowsHtml = sessions
+              .slice()
+              .reverse()
+              .map(
+                (s) => `
       <div class="log-item">
         <div class="log-item-head"><span class="name">${name}</span><span class="date">${formatDate(s.date)}</span></div>
         <div class="log-item-ex">${s.detail}</div>
       </div>`,
-            )
-            .join("");
+              )
+              .join("");
+          }
 
           const axisNote = document.getElementById("progressAxisNote");
           if (axisNote) {
@@ -3760,6 +3793,14 @@
             } else {
               prContainer.innerHTML = "";
             }
+          }
+          const viewAllExerciseBtn = document.getElementById(
+            "viewAllExerciseBtn",
+          );
+          if (viewAllExerciseBtn) {
+            viewAllExerciseBtn.addEventListener("click", () =>
+              openProgressHistoryModal(name, sessions),
+            );
           }
         }
 
@@ -4193,15 +4234,18 @@
           (a, b) => new Date(b.date) - new Date(a.date),
         );
 
-        // Agrupa por data, para ficar claro onde acaba um dia e começa outro
+        // Agrupa por nome do treino (a ordem dos grupos segue a data mais
+        // recente de cada um, já que `sorted` está por ordem decrescente).
         const groups = [];
+        const groupByName = new Map();
         sorted.forEach((lw) => {
-          const lastGroup = groups[groups.length - 1];
-          if (lastGroup && lastGroup.date === lw.date) {
-            lastGroup.items.push(lw);
-          } else {
-            groups.push({ date: lw.date, items: [lw] });
+          const name = lw.workoutName;
+          if (!groupByName.has(name)) {
+            const group = { name, items: [] };
+            groupByName.set(name, group);
+            groups.push(group);
           }
+          groupByName.get(name).items.push(lw);
         });
 
         const html = groups
@@ -4213,7 +4257,7 @@
                   .join(" · ");
                 return `<div class="log-item">
       <div class="log-item-head">
-        <span class="name">${lw.workoutName}</span>
+        <span class="name">${formatDate(lw.date)}</span>
       </div>
       <div class="log-item-ex">${exSummary}</div>
       <div style="display:flex; gap:8px; margin-top:10px;">
@@ -4224,7 +4268,7 @@
               })
               .join("");
             return `<div class="history-day-group">
-      <div class="history-day-header">${formatDate(group.date)}</div>
+      <div class="history-day-header">${group.name} <span style="color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0;">(${group.items.length})</span></div>
       ${itemsHtml}
     </div>`;
           })

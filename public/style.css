@@ -77,7 +77,7 @@ body {
   font-family: var(--font-body), sans-serif;
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: 84px;
+  padding-bottom: 100px;
   transition:
     background 0.2s,
     color 0.2s;
@@ -316,7 +316,7 @@ main {
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  padding: 12px 8px calc(14px + env(safe-area-inset-bottom));
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
 }
 .bottom-nav button {
@@ -940,7 +940,7 @@ fieldset {
 }
 .toast {
   position: fixed;
-  bottom: 96px;
+  bottom: 112px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--ink);
@@ -967,7 +967,7 @@ fieldset {
 }
 .draft-banner {
   position: fixed;
-  bottom: 78px;
+  bottom: 94px;
   left: 16px;
   right: 16px;
   max-width: 400px;
