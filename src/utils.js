@@ -141,11 +141,24 @@ function exerciseNameFromKey(key) {
   return idx >= 0 ? key.slice(idx + 2) : key;
 }
 
+// Cabeçalhos CORS: necessários porque o site (servido pelo próprio Worker)
+// e a app em modo web/Expo (servida de outra origem, ex: localhost:8081)
+// deixam de ser "a mesma origem" — sem isto, o browser bloqueia a resposta.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 function jsonResponse(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
+}
+
+function corsPreflightResponse() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
 export {
@@ -161,4 +174,5 @@ export {
   getUserRecord,
   exerciseNameFromKey,
   jsonResponse,
+  corsPreflightResponse,
 };

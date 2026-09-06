@@ -1,4 +1,4 @@
-import { jsonResponse } from './utils.js';
+import { corsPreflightResponse, jsonResponse } from './utils.js';
 import { handleAuthRegister } from './handlers/auth-register.js';
 import { handleAuthLogin } from './handlers/auth-login.js';
 import { handleDataSyncGet, handleDataSyncPost } from './handlers/data-sync.js';
@@ -12,6 +12,14 @@ export default {
     const url = new URL(request.url);
     const { pathname } = url;
     const method = request.method;
+
+    // O browser envia um pedido OPTIONS antes do pedido real ("preflight"),
+    // a perguntar se a origem tem autorização. Sem isto, qualquer pedido
+    // feito de outra origem (ex: a app em modo web) falha antes de chegar
+    // à rota propriamente dita.
+    if (method === 'OPTIONS' && pathname.startsWith('/api/')) {
+      return corsPreflightResponse();
+    }
 
     try {
       if (pathname === '/api/auth-register' && method === 'POST') return await handleAuthRegister(request, env);
