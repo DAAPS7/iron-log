@@ -6,6 +6,7 @@ import { handleOffSearch } from './handlers/off-search.js';
 import { handleFriendsSearch } from './handlers/friends-search.js';
 import { handleFriendsAction } from './handlers/friends-action.js';
 import { handleSocial } from './handlers/social.js';
+import { handleSnapshotsList, handleSnapshotsRestore } from './handlers/snapshots.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -30,6 +31,8 @@ export default {
       if (pathname === '/api/social' && method === 'GET') return await handleSocial(request, env);
       if (pathname === '/api/friends-search' && method === 'GET') return await handleFriendsSearch(request, env);
       if (pathname === '/api/friends-action' && method === 'POST') return await handleFriendsAction(request, env);
+      if (pathname === '/api/snapshots' && method === 'GET') return await handleSnapshotsList(request, env);
+      if (pathname === '/api/snapshots-restore' && method === 'POST') return await handleSnapshotsRestore(request, env);
 
       if (pathname.startsWith('/api/')) {
         return jsonResponse(404, { error: 'Rota não encontrada.' });

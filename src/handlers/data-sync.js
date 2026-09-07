@@ -1,4 +1,4 @@
-import { verifyToken, getUserRecord, putUserRecord, defaultSocial, exerciseNameFromKey, jsonResponse } from '../utils.js';
+import { verifyToken, getUserRecord, putUserRecord, defaultSocial, exerciseNameFromKey, jsonResponse, maybeWriteSnapshot } from '../utils.js';
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -56,6 +56,7 @@ export async function handleDataSyncPost(request, env) {
     record.updatedAt = new Date().toISOString();
 
     await putUserRecord(env, uKey, record);
+    await maybeWriteSnapshot(env, uKey, record);
 
     // Notifica os amigos se algum PR subiu neste guardar.
     const newPRs = findNewPRs(oldPRs, record.data ? record.data.prNotifyCache : null);

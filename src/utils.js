@@ -141,6 +141,50 @@ function exerciseNameFromKey(key) {
   return idx >= 0 ? key.slice(idx + 2) : key;
 }
 
+// ---------- Snapshots automáticos ----------
+// Uma cópia diária dos dados de cada utilizador, guardada à parte do
+// registo principal. Serve de rede de segurança: se um dispositivo gravar
+// por engano uma versão desatualizada por cima da atual (ex: um bug de
+// sincronização), há sempre um ponto recente para onde voltar.
+const SNAPSHOT_RETENTION_DAYS = 14;
+const SNAPSHOT_TTL_SECONDS = SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60;
+const SNAPSHOT_PREFIX = 'snapshot:';
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function snapshotKey(uKey, dateStr) {
+  return `${SNAPSHOT_PREFIX}${uKey}:${dateStr}`;
+}
+
+// Só grava uma vez por dia por utilizador — não é preciso mais do que isso
+// para uma rede de segurança, e evita encher o KV com uma cópia por cada
+// pequena gravação ao longo do dia.
+async function maybeWriteSnapshot(env, uKey, record) {
+  const key = snapshotKey(uKey, todayStr());
+  const existing = await env.USERS_KV.get(key);
+  if (existing) return; // já há uma cópia de hoje
+  await env.USERS_KV.put(
+    key,
+    JSON.stringify({ data: record.data, settings: record.settings, savedAt: new Date().toISOString() }),
+    { expirationTtl: SNAPSHOT_TTL_SECONDS },
+  );
+}
+
+// Lista as cópias disponíveis para um utilizador, mais recentes primeiro.
+async function listSnapshots(env, uKey) {
+  const list = await env.USERS_KV.list({ prefix: `${SNAPSHOT_PREFIX}${uKey}:` });
+  return list.keys
+    .map((k) => k.name.slice(`${SNAPSHOT_PREFIX}${uKey}:`.length))
+    .sort()
+    .reverse();
+}
+
+async function getSnapshot(env, uKey, dateStr) {
+  const raw = await env.USERS_KV.get(snapshotKey(uKey, dateStr));
+  return raw ? JSON.parse(raw) : null;
+}
+
 // Cabeçalhos CORS: necessários porque o site (servido pelo próprio Worker)
 // e a app em modo web/Expo (servida de outra origem, ex: localhost:8081)
 // deixam de ser "a mesma origem" — sem isto, o browser bloqueia a resposta.
@@ -175,4 +219,7 @@ export {
   exerciseNameFromKey,
   jsonResponse,
   corsPreflightResponse,
+  maybeWriteSnapshot,
+  listSnapshots,
+  getSnapshot,
 };
