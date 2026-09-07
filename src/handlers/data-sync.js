@@ -1,4 +1,4 @@
-import { verifyToken, getUserRecord, putUserRecord, defaultSocial, exerciseNameFromKey, jsonResponse, maybeWriteSnapshot } from '../utils.js';
+import { verifyToken, getUserRecord, putUserRecord, defaultSocial, exerciseNameFromKey, jsonResponse, maybeWriteSnapshot, mergeUserData } from '../utils.js';
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -51,7 +51,7 @@ export async function handleDataSyncPost(request, env) {
     const body = await request.json();
     const oldPRs = record.data ? record.data.prNotifyCache : null;
 
-    if (body.data !== undefined) record.data = body.data;
+    if (body.data !== undefined) record.data = mergeUserData(record.data, body.data);
     if (body.settings !== undefined) record.settings = body.settings;
     record.updatedAt = new Date().toISOString();
 
@@ -80,7 +80,7 @@ export async function handleDataSyncPost(request, env) {
       }
     }
 
-    return jsonResponse(200, { ok: true, updatedAt: record.updatedAt });
+    return jsonResponse(200, { ok: true, updatedAt: record.updatedAt, data: record.data, settings: record.settings });
   } catch (e) {
     console.error(e);
     return jsonResponse(500, { error: 'Erro ao guardar dados.' });
