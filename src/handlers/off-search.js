@@ -9,7 +9,7 @@ export async function handleOffSearch(request) {
   }
 
   try {
-    const offUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(query)}&page_size=15&page=1&langs=pt,en`;
+    const offUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(query)}&page_size=40&page=1&langs=pt,en`;
     const res = await fetch(offUrl, {
       headers: {
         'User-Agent': 'IronLog/1.0 (personal fitness tracker app)',
