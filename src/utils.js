@@ -152,6 +152,15 @@ const MERGE_ARRAYS_BY_ID = [
 ];
 const MERGE_ARRAYS_BY_DATE = ['weightHistory'];
 const MERGE_BEST_WEIGHT_OBJECTS = ['exercisePRs', 'prNotifyCache'];
+// Objetos com sub-chaves (ex: metricGoals.bodyFat / metricGoals.weight) —
+// se um dispositivo só conhecer uma das sub-chaves (ex: só tem definida a
+// meta de gordura corporal), uma substituição direta apagaria a outra
+// sub-chave (ex: a meta de peso) que outro dispositivo já tinha definido.
+const MERGE_SHALLOW_OBJECTS = ['metricGoals', 'macroGoals', 'weeklySchedule'];
+
+function mergeShallowObject(oldObj, newObj) {
+  return { ...(oldObj || {}), ...(newObj || {}) };
+}
 
 function mergeArrayByKey(oldArr, newArr, keyField) {
   const map = new Map();
@@ -196,6 +205,9 @@ function mergeUserData(oldData, newData) {
   });
   MERGE_BEST_WEIGHT_OBJECTS.forEach((key) => {
     merged[key] = mergeBestWeightObject(oldData[key], newData[key]);
+  });
+  MERGE_SHALLOW_OBJECTS.forEach((key) => {
+    merged[key] = mergeShallowObject(oldData[key], newData[key]);
   });
   return merged;
 }
