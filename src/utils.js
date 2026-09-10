@@ -114,6 +114,16 @@ function defaultData() {
     metricGoals: {},
     weeklySchedule: {},
     lastWeeklyReviewWeek: null,
+    deletedIds: {
+      loggedWorkouts: [],
+      workouts: [],
+      calorieEntries: [],
+      waterEntries: [],
+      customFoods: [],
+      mealPlans: [],
+      exerciseGoals: [],
+      weightHistory: [],
+    },
   };
 }
 function defaultSettings() {
@@ -157,12 +167,27 @@ const MERGE_BEST_WEIGHT_OBJECTS = ['exercisePRs', 'prNotifyCache'];
 // meta de gordura corporal), uma substituição direta apagaria a outra
 // sub-chave (ex: a meta de peso) que outro dispositivo já tinha definido.
 const MERGE_SHALLOW_OBJECTS = ['metricGoals', 'macroGoals', 'weeklySchedule'];
+const DELETABLE_FIELDS = [...MERGE_ARRAYS_BY_ID, ...MERGE_ARRAYS_BY_DATE];
 
 function mergeShallowObject(oldObj, newObj) {
   return { ...(oldObj || {}), ...(newObj || {}) };
 }
 
-function mergeArrayByKey(oldArr, newArr, keyField) {
+// Une duas listas de marcas de eliminação — uma vez apagado nalgum lado,
+// fica apagado; a fusão nunca "desfaz" uma marca de eliminação.
+function mergeDeletedIds(oldDeleted, newDeleted) {
+  const merged = {};
+  DELETABLE_FIELDS.forEach((field) => {
+    const combined = new Set([...(oldDeleted?.[field] || []), ...(newDeleted?.[field] || [])]);
+    merged[field] = [...combined];
+  });
+  return merged;
+}
+
+// Une duas listas por chave. Itens marcados como apagados (em `tombstones`)
+// ficam de fora, mesmo que ainda existam num dos dois lados — sem isto,
+// apagar algo era sempre desfeito na gravação seguinte.
+function mergeArrayByKey(oldArr, newArr, keyField, tombstones) {
   const map = new Map();
   (oldArr || []).forEach((item) => {
     if (item && item[keyField] != null) map.set(item[keyField], item);
@@ -170,6 +195,7 @@ function mergeArrayByKey(oldArr, newArr, keyField) {
   (newArr || []).forEach((item) => {
     if (item && item[keyField] != null) map.set(item[keyField], item);
   });
+  (tombstones || []).forEach((key) => map.delete(key));
   return [...map.values()];
 }
 
@@ -196,12 +222,14 @@ function mergeUserData(oldData, newData) {
   if (!oldData) return newData;
   if (!newData) return oldData;
 
+  const mergedDeletedIds = mergeDeletedIds(oldData.deletedIds, newData.deletedIds);
+
   const merged = { ...newData };
   MERGE_ARRAYS_BY_ID.forEach((key) => {
-    merged[key] = mergeArrayByKey(oldData[key], newData[key], 'id');
+    merged[key] = mergeArrayByKey(oldData[key], newData[key], 'id', mergedDeletedIds[key]);
   });
   MERGE_ARRAYS_BY_DATE.forEach((key) => {
-    merged[key] = mergeArrayByKey(oldData[key], newData[key], 'date');
+    merged[key] = mergeArrayByKey(oldData[key], newData[key], 'date', mergedDeletedIds[key]);
   });
   MERGE_BEST_WEIGHT_OBJECTS.forEach((key) => {
     merged[key] = mergeBestWeightObject(oldData[key], newData[key]);
@@ -209,6 +237,7 @@ function mergeUserData(oldData, newData) {
   MERGE_SHALLOW_OBJECTS.forEach((key) => {
     merged[key] = mergeShallowObject(oldData[key], newData[key]);
   });
+  merged.deletedIds = mergedDeletedIds;
   return merged;
 }
 
