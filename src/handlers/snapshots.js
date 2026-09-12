@@ -1,4 +1,4 @@
-import { verifyToken, getUserRecord, putUserRecord, listSnapshots, getSnapshot, jsonResponse } from '../utils.js';
+import { verifyToken, getUserRecord, putUserRecord, listSnapshots, getSnapshot, todayStr, jsonResponse } from '../utils.js';
 
 async function authed(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
@@ -40,8 +40,12 @@ export async function handleSnapshotsRestore(request, env) {
 
   // Rede de segurança sobre a rede de segurança: guarda o estado de antes
   // de restaurar, para poderes desfazer se te enganaste na data.
+  //
+  // Usa a data de hoje como nome (não Date.now()) — se restaurares várias
+  // vezes no mesmo dia, fica só uma cópia de "antes de mexer hoje", em vez
+  // de uma nova entrada a cada tentativa, que nunca mais se limitava.
   await env.USERS_KV.put(
-    `snapshot:${uKey}:antes-de-restaurar-${Date.now()}`,
+    `snapshot:${uKey}:antes-de-restaurar-${todayStr()}`,
     JSON.stringify({ data: record.data, settings: record.settings, savedAt: new Date().toISOString() }),
     { expirationTtl: 14 * 24 * 60 * 60 },
   );

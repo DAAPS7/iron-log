@@ -342,5 +342,6 @@ export {
   maybeWriteSnapshot,
   listSnapshots,
   getSnapshot,
+  todayStr,
   mergeUserData,
 };
