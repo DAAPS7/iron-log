@@ -104,6 +104,7 @@ function defaultData() {
     loggedWorkouts: [],
     calorieEntries: [],
     waterEntries: [],
+    creatineLog: [],
     calorieGoal: null,
     macroGoals: { protein: null, carbs: null, fat: null },
     exercisePRs: {},
@@ -123,6 +124,7 @@ function defaultData() {
       mealPlans: [],
       exerciseGoals: [],
       weightHistory: [],
+      creatineLog: [],
     },
   };
 }
@@ -160,7 +162,7 @@ const MERGE_ARRAYS_BY_ID = [
   'mealPlans',
   'exerciseGoals',
 ];
-const MERGE_ARRAYS_BY_DATE = ['weightHistory'];
+const MERGE_ARRAYS_BY_DATE = ['weightHistory', 'creatineLog'];
 const MERGE_BEST_WEIGHT_OBJECTS = ['exercisePRs', 'prNotifyCache'];
 // Objetos com sub-chaves (ex: metricGoals.bodyFat / metricGoals.weight) —
 // se um dispositivo só conhecer uma das sub-chaves (ex: só tem definida a
