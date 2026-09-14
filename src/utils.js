@@ -194,10 +194,20 @@ function mergeArrayByKey(oldArr, newArr, keyField, tombstones) {
   (oldArr || []).forEach((item) => {
     if (item && item[keyField] != null) map.set(item[keyField], item);
   });
+  const reAdded = new Set();
   (newArr || []).forEach((item) => {
-    if (item && item[keyField] != null) map.set(item[keyField], item);
+    if (item && item[keyField] != null) {
+      map.set(item[keyField], item);
+      reAdded.add(item[keyField]);
+    }
   });
-  (tombstones || []).forEach((key) => map.delete(key));
+  // Uma marca de eliminação só vale para chaves que o lado mais recente NÃO
+  // voltou a incluir. Sem isto, apagar algo e voltar a adicionar a mesma
+  // chave (ex: peso do mesmo dia, ou creatina do mesmo dia) fazia a fusão
+  // seguinte apagá-la de novo.
+  (tombstones || []).forEach((key) => {
+    if (!reAdded.has(key)) map.delete(key);
+  });
   return [...map.values()];
 }
 
